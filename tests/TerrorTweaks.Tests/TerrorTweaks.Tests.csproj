@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <Compile Include="..\..\TerrorTweaks\Util\ItemIdNormalizer.cs" Link="ItemIdNormalizer.cs" />
+    <Compile Include="..\..\TerrorTweaks\Util\JobClassifier.cs" Link="JobClassifier.cs" />
+    <Compile Include="..\..\TerrorTweaks\Util\GearsetRoulette.cs" Link="GearsetRoulette.cs" />
   </ItemGroup>
 
 </Project>

@@ -19,4 +19,12 @@ public class ItemIdNormalizerTests
     [Fact]
     public void Zero_StaysZero()
         => Assert.Equal(0u, ItemIdNormalizer.ToBaseItemId(0u));
+
+    [Fact]
+    public void CollectibleThreshold_IsInclusive()
+        => Assert.Equal(0u, ItemIdNormalizer.ToBaseItemId(500_000u));
+
+    [Fact]
+    public void HqThreshold_IsInclusiveAndWinsOverCollectible()
+        => Assert.Equal(0u, ItemIdNormalizer.ToBaseItemId(1_000_000u));
 }

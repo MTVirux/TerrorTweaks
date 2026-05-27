@@ -1,0 +1,23 @@
+{
+  "_comment": "Local-dev stub. CI overwrites this with repo.json content at release time. Edit repo.json (the single source of truth); this file only exists so local debug builds load with sensible metadata.",
+  "Author": "MTVirux",
+  "Name": "TerrorTweaks",
+  "Punchline": "A collection of small quality-of-life tweaks for FFXIV.",
+  "Description": "A collection of small quality-of-life tweaks for FFXIV.\n\nDM @mtvirux on discord for assistance or bug reports.",
+  "Tags": [
+    "Tweaks",
+    "QoL",
+    "ContextMenu",
+    "Clipboard",
+    "Terror"
+  ],
+  "LastUpdate": 1779408000,
+  "InternalName": "TerrorTweaks",
+  "AssemblyVersion": "1.0.0.0",
+  "TestingAssemblyVersion": "1.0.0.0",
+  "RepoUrl": "https://github.com/MTVirux/TerrorTweaks",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "ImageUrls": null,
+  "IconUrl": "https://raw.githubusercontent.com/MTVirux/TerrorTweaks/main/images/icon.png"
+}

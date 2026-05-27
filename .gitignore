@@ -1,0 +1,10 @@
+# Build output
+bin/
+obj/
+*.user
+
+# Local agent/workflow files — never committed
+.claude/
+
+# Local dev manifest is generated/managed locally
+*.lscache

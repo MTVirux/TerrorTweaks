@@ -8,3 +8,5 @@ obj/
 
 # Local dev manifest is generated/managed locally
 *.lscache
+
+scripts

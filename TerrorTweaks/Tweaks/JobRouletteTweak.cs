@@ -16,14 +16,15 @@ public sealed class JobRouletteTweak : Tweak
     public override string Name => "Job Roulette";
 
     public override string Description =>
-        "Adds /jobrolo, which equips a random gearset chosen with equal weight per eligible job.";
+        "Adds /jobrolo, which equips a random gearset chosen with equal weight per eligible job. " +
+        "Optionally pass a role (e.g. /jobrolo tanks) to draw from just that category.";
 
     public override void Enable()
     {
         base.Enable();
         Services.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Equip a random gearset from your eligible jobs.",
+            HelpMessage = "Equip a random gearset. Optionally pass a role, e.g. /jobrolo tanks.",
         });
     }
 
@@ -33,9 +34,9 @@ public sealed class JobRouletteTweak : Tweak
         base.Disable();
     }
 
-    private void OnCommand(string command, string args) => Roll();
+    private void OnCommand(string command, string args) => Roll(args);
 
-    private unsafe void Roll()
+    private unsafe void Roll(string args)
     {
         var module = RaptureGearsetModule.Instance();
         if (module is null)
@@ -44,9 +45,10 @@ public sealed class JobRouletteTweak : Tweak
             return;
         }
 
-        var opts = ToOptions(Plugin.Config.JobRoulette);
-        var candidates = new List<(int slotIndex, uint classJobId)>();
+        if (!TryBuildFilter(args, out var isEligible))
+            return;
 
+        var candidates = new List<(int slotIndex, uint classJobId)>();
         for (var i = 0; i < 100; i++)
         {
             if (!module->IsValidGearset(i))
@@ -57,7 +59,7 @@ public sealed class JobRouletteTweak : Tweak
                 continue;
 
             uint classJobId = entry->ClassJob;
-            if (GearsetRoulette.IsEligible(JobClassifier.Classify(classJobId), IsLimitedJob(classJobId), opts))
+            if (isEligible(classJobId))
                 candidates.Add((i, classJobId));
         }
 
@@ -77,8 +79,34 @@ public sealed class JobRouletteTweak : Tweak
         Services.Chat.Print($"Job Roulette: {gearsetName} ({jobAbbr}).");
     }
 
+    // Builds the per-job eligibility predicate. With an argument, restricts to that single
+    // category (ignoring toggles); without one, applies the configured options. Returns
+    // false (after reporting) when an argument is present but unrecognised.
+    private static bool TryBuildFilter(string args, out Func<uint, bool> isEligible)
+    {
+        var trimmed = args.Trim();
+        if (trimmed.Length > 0)
+        {
+            if (!JobCategoryParser.TryParse(trimmed, out var category))
+            {
+                Services.Chat.Print(
+                    $"Job Roulette: unknown role '{trimmed}'. Try: tanks, healers, melee, casters, physranged, crafters, gatherers.");
+                isEligible = _ => false;
+                return false;
+            }
+
+            isEligible = jobId => JobClassifier.Classify(jobId) == category;
+            return true;
+        }
+
+        var opts = ToOptions(Plugin.Config.JobRoulette);
+        isEligible = jobId => GearsetRoulette.IsEligible(JobClassifier.Classify(jobId), IsLimitedJob(jobId), opts);
+        return true;
+    }
+
     private static RouletteOptions ToOptions(JobRouletteConfig cfg)
-        => new(cfg.IncludeCrafters, cfg.IncludeGatherers, cfg.IncludeLimited);
+        => new(cfg.IncludeTanks, cfg.IncludeHealers, cfg.IncludeMelee, cfg.IncludePhysRanged,
+            cfg.IncludeCasters, cfg.IncludeCrafters, cfg.IncludeGatherers, cfg.IncludeLimited);
 
     private static bool IsLimitedJob(uint classJobId)
         => Services.DataManager.GetExcelSheet<ClassJob>().TryGetRow(classJobId, out var row) && row.IsLimitedJob;
@@ -93,28 +121,29 @@ public sealed class JobRouletteTweak : Tweak
         var cfg = Plugin.Config.JobRoulette;
         var changed = false;
 
-        var crafters = cfg.IncludeCrafters;
-        if (ImGui.Checkbox("Include crafters##JobRoulette", ref crafters))
-        {
-            cfg.IncludeCrafters = crafters;
-            changed = true;
-        }
+        ImGui.TextUnformatted("Combat roles");
+        changed |= Checkbox("Tanks", cfg.IncludeTanks, v => cfg.IncludeTanks = v);
+        changed |= Checkbox("Healers", cfg.IncludeHealers, v => cfg.IncludeHealers = v);
+        changed |= Checkbox("Melee", cfg.IncludeMelee, v => cfg.IncludeMelee = v);
+        changed |= Checkbox("Physical ranged", cfg.IncludePhysRanged, v => cfg.IncludePhysRanged = v);
+        changed |= Checkbox("Casters", cfg.IncludeCasters, v => cfg.IncludeCasters = v);
 
-        var gatherers = cfg.IncludeGatherers;
-        if (ImGui.Checkbox("Include gatherers##JobRoulette", ref gatherers))
-        {
-            cfg.IncludeGatherers = gatherers;
-            changed = true;
-        }
-
-        var limited = cfg.IncludeLimited;
-        if (ImGui.Checkbox("Include limited jobs##JobRoulette", ref limited))
-        {
-            cfg.IncludeLimited = limited;
-            changed = true;
-        }
+        ImGui.Separator();
+        changed |= Checkbox("Crafters", cfg.IncludeCrafters, v => cfg.IncludeCrafters = v);
+        changed |= Checkbox("Gatherers", cfg.IncludeGatherers, v => cfg.IncludeGatherers = v);
+        changed |= Checkbox("Limited jobs", cfg.IncludeLimited, v => cfg.IncludeLimited = v);
 
         if (changed)
             Plugin.Config.Save();
+    }
+
+    private static bool Checkbox(string label, bool value, Action<bool> set)
+    {
+        var v = value;
+        if (!ImGui.Checkbox($"{label}##JobRoulette", ref v))
+            return false;
+
+        set(v);
+        return true;
     }
 }

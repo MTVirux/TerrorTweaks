@@ -36,15 +36,16 @@ internal sealed class TweakManager : IDisposable
             return;
 
         if (enabled)
-        {
             SafeEnable(tweak);
-            Plugin.Config.EnabledTweaks.Add(tweak.InternalName);
-        }
         else
-        {
-            tweak.Disable();
+            SafeDisable(tweak);
+
+        // Persist the actual resulting state, not the requested one: if Enable/Disable
+        // threw, the on-disk set must still match what the tweak is really doing.
+        if (tweak.Enabled)
+            Plugin.Config.EnabledTweaks.Add(tweak.InternalName);
+        else
             Plugin.Config.EnabledTweaks.Remove(tweak.InternalName);
-        }
 
         Plugin.Config.Save();
     }
@@ -61,9 +62,22 @@ internal sealed class TweakManager : IDisposable
         }
     }
 
+    private static void SafeDisable(Tweak tweak)
+    {
+        try
+        {
+            tweak.Disable();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, $"Failed to disable tweak {tweak.InternalName}");
+        }
+    }
+
     public void Dispose()
     {
+        // SafeDisable so one throwing tweak can't leave the rest with their hooks attached.
         foreach (var tweak in _tweaks.Where(t => t.Enabled))
-            tweak.Disable();
+            SafeDisable(tweak);
     }
 }

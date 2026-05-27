@@ -5,29 +5,71 @@ namespace TerrorTweaks.Tests;
 
 public class GearsetRouletteTests
 {
-    [Fact]
-    public void CombatNonLimited_AlwaysEligible()
-        => Assert.True(GearsetRoulette.IsEligible(JobKind.Combat, false, new RouletteOptions(false, false, false)));
+    private static readonly RouletteOptions None =
+        new(false, false, false, false, false, false, false, false);
 
     [Fact]
-    public void CombatLimited_RequiresIncludeLimited()
+    public void Tank_RequiresIncludeTanks()
     {
-        Assert.False(GearsetRoulette.IsEligible(JobKind.Combat, true, new RouletteOptions(false, false, false)));
-        Assert.True(GearsetRoulette.IsEligible(JobKind.Combat, true, new RouletteOptions(false, false, true)));
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Tank, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Tank, false, None with { IncludeTanks = true }));
+    }
+
+    [Fact]
+    public void Healer_RequiresIncludeHealers()
+    {
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Healer, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Healer, false, None with { IncludeHealers = true }));
+    }
+
+    [Fact]
+    public void Melee_RequiresIncludeMelee()
+    {
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Melee, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Melee, false, None with { IncludeMelee = true }));
+    }
+
+    [Fact]
+    public void PhysRanged_RequiresIncludePhysRanged()
+    {
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.PhysRanged, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.PhysRanged, false, None with { IncludePhysRanged = true }));
+    }
+
+    [Fact]
+    public void Caster_RequiresIncludeCasters()
+    {
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Caster, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Caster, false, None with { IncludeCasters = true }));
     }
 
     [Fact]
     public void Crafter_RequiresIncludeCrafters()
     {
-        Assert.False(GearsetRoulette.IsEligible(JobKind.Crafter, false, new RouletteOptions(false, false, false)));
-        Assert.True(GearsetRoulette.IsEligible(JobKind.Crafter, false, new RouletteOptions(true, false, false)));
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Crafter, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Crafter, false, None with { IncludeCrafters = true }));
     }
 
     [Fact]
     public void Gatherer_RequiresIncludeGatherers()
     {
-        Assert.False(GearsetRoulette.IsEligible(JobKind.Gatherer, false, new RouletteOptions(false, false, false)));
-        Assert.True(GearsetRoulette.IsEligible(JobKind.Gatherer, false, new RouletteOptions(false, true, false)));
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Gatherer, false, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Gatherer, false, None with { IncludeGatherers = true }));
+    }
+
+    [Fact]
+    public void Other_IsNeverEligible()
+        => Assert.False(GearsetRoulette.IsEligible(JobCategory.Other, false,
+            new RouletteOptions(true, true, true, true, true, true, true, true)));
+
+    [Fact]
+    public void Limited_GatedByIncludeLimited_RegardlessOfRole()
+    {
+        // Blue Mage is a limited Caster.
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Caster, true, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Caster, true, None with { IncludeLimited = true }));
+        // The Casters toggle alone must not surface a limited job.
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Caster, true, None with { IncludeCasters = true }));
     }
 
     [Fact]

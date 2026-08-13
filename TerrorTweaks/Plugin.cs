@@ -9,6 +9,7 @@ namespace TerrorTweaks;
 public sealed class Plugin : IDalamudPlugin
 {
     private const string CommandName = "/tterror";
+    private const string CommandAlias = "/tt";
 
     internal static Configuration Config { get; private set; } = null!;
 
@@ -30,6 +31,11 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Open the TerrorTweaks configuration window.",
         });
 
+        Services.CommandManager.AddHandler(CommandAlias, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Alias for " + CommandName + ".",
+        });
+
         pluginInterface.UiBuilder.Draw         += _configWindow.Draw;
         pluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         pluginInterface.UiBuilder.OpenMainUi   += OpenConfigUi;
@@ -42,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         Services.CommandManager.RemoveHandler(CommandName);
+        Services.CommandManager.RemoveHandler(CommandAlias);
         _pluginInterface.UiBuilder.Draw         -= _configWindow.Draw;
         _pluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         _pluginInterface.UiBuilder.OpenMainUi   -= OpenConfigUi;

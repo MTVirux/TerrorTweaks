@@ -15,7 +15,17 @@ public sealed class Configuration : IPluginConfiguration
 
     public BulkPurchaseConfig BulkPurchase { get; set; } = new();
 
+    public ClipboardConfig Clipboard { get; set; } = new();
+
     public void Save() => Services.PluginInterface.SavePluginConfig(this);
+}
+
+[Serializable]
+public sealed class ClipboardConfig
+{
+    public List<string> SuppressWhenPresent { get; set; } = [];
+    public List<string> LearnedEntries { get; set; } = [];
+    public HashSet<string> SuppressedMenus { get; set; } = [];
 }
 
 [Serializable]

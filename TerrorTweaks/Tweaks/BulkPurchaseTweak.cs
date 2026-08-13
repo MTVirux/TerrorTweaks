@@ -238,7 +238,7 @@ public sealed class BulkPurchaseTweak : Tweak
         ref var item = ref handler->Items[index];
         return new ShopItemSnapshot(
             itemId,
-            item.ItemName.ToString(),
+            ItemNames.Lookup(itemId),
             index,
             item.PriceBuy,
             item.StackSize,

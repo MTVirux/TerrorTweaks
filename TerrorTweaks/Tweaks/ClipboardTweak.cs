@@ -2,7 +2,6 @@ using System.Linq;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Gui.ContextMenu;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Lumina.Excel.Sheets;
 using TerrorTweaks.Framework;
 using TerrorTweaks.Util;
 
@@ -38,7 +37,7 @@ public sealed class ClipboardTweak : Tweak
         if (itemId == 0)
             return;
 
-        var name = LookupName(itemId);
+        var name = ItemNames.Lookup(itemId);
         if (string.IsNullOrEmpty(name))
             return;
 
@@ -69,14 +68,6 @@ public sealed class ClipboardTweak : Tweak
     {
         var agent = AgentItemDetail.Instance();
         return agent is null ? 0 : agent->ItemId;
-    }
-
-    private static string LookupName(uint itemId)
-    {
-        var baseId = ItemIdNormalizer.ToBaseItemId(itemId);
-        return Services.DataManager.GetExcelSheet<Item>().TryGetRow(baseId, out var row)
-            ? row.Name.ExtractText()
-            : string.Empty;
     }
 
     private static void Copy(string name)

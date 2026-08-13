@@ -1,6 +1,6 @@
 using System;
 
-namespace TerrorTweaks.Util;
+namespace TerrorTweaks.Tweaks.BulkPurchase;
 
 internal enum PurchaseBlock
 {

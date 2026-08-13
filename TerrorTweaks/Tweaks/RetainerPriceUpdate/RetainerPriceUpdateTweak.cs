@@ -12,7 +12,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using TerrorTweaks.Framework;
 using TerrorTweaks.Util;
 
-namespace TerrorTweaks.Tweaks;
+namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
 
 internal readonly record struct MarketTarget(uint ItemId, bool HighQuality);
 

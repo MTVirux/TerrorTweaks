@@ -6,10 +6,9 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using TerrorTweaks.Framework;
-using TerrorTweaks.UI;
 using TerrorTweaks.Util;
 
-namespace TerrorTweaks.Tweaks;
+namespace TerrorTweaks.Tweaks.BulkPurchase;
 
 internal readonly record struct ShopItemSnapshot(
     uint ItemId,

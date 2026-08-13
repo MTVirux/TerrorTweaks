@@ -1,4 +1,4 @@
-namespace TerrorTweaks.Util;
+namespace TerrorTweaks.Tweaks.JobRoulette;
 
 public enum JobCategory
 {

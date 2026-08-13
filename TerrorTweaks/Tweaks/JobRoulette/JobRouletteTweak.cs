@@ -5,9 +5,8 @@ using Dalamud.Game.Command;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Lumina.Excel.Sheets;
 using TerrorTweaks.Framework;
-using TerrorTweaks.Util;
 
-namespace TerrorTweaks.Tweaks;
+namespace TerrorTweaks.Tweaks.JobRoulette;
 
 public sealed class JobRouletteTweak : Tweak
 {

@@ -1,4 +1,4 @@
-using TerrorTweaks.Util;
+using TerrorTweaks.Tweaks.JobRoulette;
 
 namespace TerrorTweaks.Tests;
 

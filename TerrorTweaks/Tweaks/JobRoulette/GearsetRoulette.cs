@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace TerrorTweaks.Util;
+namespace TerrorTweaks.Tweaks.JobRoulette;
 
 internal readonly record struct RouletteOptions(
     bool IncludeTanks,

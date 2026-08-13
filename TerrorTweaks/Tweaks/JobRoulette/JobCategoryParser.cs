@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace TerrorTweaks.Util;
+namespace TerrorTweaks.Tweaks.JobRoulette;
 
 internal static class JobCategoryParser
 {

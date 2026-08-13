@@ -5,7 +5,7 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using TerrorTweaks.Framework;
 using TerrorTweaks.Util;
 
-namespace TerrorTweaks.Tweaks;
+namespace TerrorTweaks.Tweaks.Clipboard;
 
 public sealed class ClipboardTweak : Tweak
 {

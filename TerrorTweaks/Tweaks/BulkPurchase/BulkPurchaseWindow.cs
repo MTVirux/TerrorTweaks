@@ -1,10 +1,8 @@
 using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using TerrorTweaks.Tweaks;
-using TerrorTweaks.Util;
 
-namespace TerrorTweaks.UI;
+namespace TerrorTweaks.Tweaks.BulkPurchase;
 
 internal sealed class BulkPurchaseWindow
 {

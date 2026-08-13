@@ -23,7 +23,6 @@
     <Compile Include="..\..\TerrorTweaks\Util\GearsetRoulette.cs" Link="GearsetRoulette.cs" />
     <Compile Include="..\..\TerrorTweaks\Util\JobCategoryParser.cs" Link="JobCategoryParser.cs" />
     <Compile Include="..\..\TerrorTweaks\Util\BulkPurchasePlan.cs" Link="BulkPurchasePlan.cs" />
-    <Compile Include="..\..\TerrorTweaks\Util\ClipboardSuppression.cs" Link="ClipboardSuppression.cs" />
   </ItemGroup>
 
 </Project>

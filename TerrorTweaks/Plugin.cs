@@ -23,6 +23,8 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.Create<Services>();
         Config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
+        MenuPrefix.Register();
+
         _tweakManager = new TweakManager();
         _configWindow = new ConfigWindow(_tweakManager);
 
@@ -54,5 +56,6 @@ public sealed class Plugin : IDalamudPlugin
         _pluginInterface.UiBuilder.OpenMainUi   -= OpenConfigUi;
         _configWindow.Dispose();
         _tweakManager.Dispose();
+        MenuPrefix.Unregister();
     }
 }

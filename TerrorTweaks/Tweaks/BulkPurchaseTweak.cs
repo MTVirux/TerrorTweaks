@@ -74,12 +74,7 @@ public sealed class BulkPurchaseTweak : Tweak
         if (ResolveHoveredItem() is not { } item)
             return;
 
-        args.AddMenuItem(new MenuItem
-        {
-            Name = "Bulk Purchase",
-            PrefixChar = 'T',
-            OnClicked = _ => _window.Open(item),
-        });
+        args.AddMenuItem(MenuPrefix.Item("Bulk Purchase", _ => _window.Open(item)));
     }
 
     internal bool IsRunning => _running;

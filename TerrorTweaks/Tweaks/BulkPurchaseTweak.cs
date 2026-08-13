@@ -148,12 +148,20 @@ public sealed class BulkPurchaseTweak : Tweak
         var handler = Handler();
         if (handler is null)
         {
-            Finish("the shop closed");
+            Finish(_remaining <= 0 ? null : "the shop closed");
             return;
         }
 
         if (handler->WaitingForTransactionToFinish || Environment.TickCount64 < _nextPurchaseAt)
             return;
+
+        // Summarise only once the final transaction has settled, so the game's own purchase
+        // message for it prints before ours.
+        if (_remaining <= 0)
+        {
+            Finish(null);
+            return;
+        }
 
         var index = FindIndex(handler, _job.ItemId);
         if (index < 0)
@@ -190,9 +198,6 @@ public sealed class BulkPurchaseTweak : Tweak
 
         _remaining -= batch;
         _nextPurchaseAt = Environment.TickCount64 + Math.Max(0, Plugin.Config.BulkPurchase.DelayMs);
-
-        if (_remaining <= 0)
-            Finish(null);
     }
 
     private void Finish(string? reason)

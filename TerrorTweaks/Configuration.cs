@@ -13,7 +13,16 @@ public sealed class Configuration : IPluginConfiguration
 
     public JobRouletteConfig JobRoulette { get; set; } = new();
 
+    public BulkPurchaseConfig BulkPurchase { get; set; } = new();
+
     public void Save() => Services.PluginInterface.SavePluginConfig(this);
+}
+
+[Serializable]
+public sealed class BulkPurchaseConfig
+{
+    public int DelayMs { get; set; } = 100;
+    public bool TopUpMode { get; set; }
 }
 
 [Serializable]

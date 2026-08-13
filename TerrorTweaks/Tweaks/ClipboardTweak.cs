@@ -9,10 +9,10 @@ namespace TerrorTweaks.Tweaks;
 
 public sealed class ClipboardTweak : Tweak
 {
-    public override string Name => "Clipboard";
+    public override string Name => "Copy the Clipboard (TT)";
 
     public override string Description =>
-        "Adds a \"Clipboard\" entry to item context menus that copies the item's name.";
+        "Adds a \"Copy the Clipboard (TT)\" entry to item context menus that copies the item's name.";
 
     // Default-type menus only expose the hovered item through AgentItemDetail; restrict to
     // surfaces where that agent is reliably populated. Extend this list to add coverage.
@@ -46,7 +46,7 @@ public sealed class ClipboardTweak : Tweak
 
         args.AddMenuItem(new MenuItem
         {
-            Name = "Clipboard",
+            Name = "Copy the Clipboard (TT)",
             PrefixChar = 'T',
             OnClicked = _ => Copy(name),
         });

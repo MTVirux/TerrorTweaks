@@ -10,4 +10,6 @@ internal static class ItemIdNormalizer
         >= 500_000   => itemId - 500_000,
         _            => itemId,
     };
+
+    public static bool IsHighQuality(uint itemId) => itemId >= 1_000_000;
 }

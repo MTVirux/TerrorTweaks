@@ -15,6 +15,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public BulkPurchaseConfig BulkPurchase { get; set; } = new();
 
+    public RetainerPriceConfig RetainerPrice { get; set; } = new();
+
     public void Save() => Services.PluginInterface.SavePluginConfig(this);
 }
 
@@ -23,6 +25,12 @@ public sealed class BulkPurchaseConfig
 {
     public int DelayMs { get; set; } = 100;
     public bool TopUpMode { get; set; }
+}
+
+[Serializable]
+public sealed class RetainerPriceConfig
+{
+    public int DelayMs { get; set; } = 250;
 }
 
 [Serializable]

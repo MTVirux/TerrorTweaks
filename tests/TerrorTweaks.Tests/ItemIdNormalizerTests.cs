@@ -4,6 +4,13 @@ namespace TerrorTweaks.Tests;
 
 public class ItemIdNormalizerTests
 {
+    [Theory]
+    [InlineData(1_004_000u, true)]
+    [InlineData(504_000u, false)]
+    [InlineData(4_000u, false)]
+    public void IsHighQuality_OnlyForTheHqOffset(uint itemId, bool expected)
+        => Assert.Equal(expected, ItemIdNormalizer.IsHighQuality(itemId));
+
     [Fact]
     public void NormalItemId_IsUnchanged()
         => Assert.Equal(4554u, ItemIdNormalizer.ToBaseItemId(4554u));

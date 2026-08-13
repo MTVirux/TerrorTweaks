@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using TerrorTweaks.Framework;
@@ -7,12 +8,17 @@ namespace TerrorTweaks.UI;
 
 internal sealed class ConfigWindow : IDisposable
 {
+    private const float ListWidth = 180f;
+
     private readonly TweakManager _tweakManager;
     private bool _isOpen;
+    private string _search = string.Empty;
+    private Tweak? _selected;
 
     internal ConfigWindow(TweakManager tweakManager)
     {
         _tweakManager = tweakManager;
+        _selected = _tweakManager.Tweaks.FirstOrDefault();
     }
 
     internal bool IsOpen
@@ -28,34 +34,78 @@ internal sealed class ConfigWindow : IDisposable
         if (!_isOpen)
             return;
 
-        ImGui.SetNextWindowSize(new Vector2(440, 360), ImGuiCond.FirstUseEver);
-        if (!ImGui.Begin("TerrorTweaks — Configuration", ref _isOpen))
+        ImGui.SetNextWindowSize(new Vector2(640, 400), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(460, 260), new Vector2(float.MaxValue, float.MaxValue));
+
+        if (!ImGui.Begin("TerrorTweaks - Configuration", ref _isOpen))
         {
             ImGui.End();
             return;
         }
 
-        ImGui.TextUnformatted("Tweaks");
+        DrawTweakList();
+        ImGui.SameLine();
+        DrawTweakOptions();
+
+        ImGui.End();
+    }
+
+    private void DrawTweakList()
+    {
+        ImGui.BeginChild("##TweakList", new Vector2(ListWidth, 0), true);
+
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##TweakSearch", "Search...", ref _search, 64);
         ImGui.Separator();
 
         foreach (var tweak in _tweakManager.Tweaks)
         {
+            if (_search.Length > 0 && !tweak.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             var enabled = tweak.Enabled;
-            if (ImGui.Checkbox($"{tweak.Name}##{tweak.InternalName}", ref enabled))
+            if (ImGui.Checkbox($"##Enable{tweak.InternalName}", ref enabled))
                 _tweakManager.SetEnabled(tweak, enabled);
 
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(tweak.Description);
-
-            if (tweak.Enabled)
-            {
-                ImGui.Indent();
-                tweak.DrawConfig();
-                ImGui.Unindent();
-            }
+            // The name is a separate hit target so picking a tweak to configure never
+            // toggles it, and toggling never moves the selection.
+            ImGui.SameLine();
+            if (ImGui.Selectable($"{tweak.Name}##Select{tweak.InternalName}", _selected == tweak))
+                _selected = tweak;
         }
 
-        ImGui.End();
+        ImGui.EndChild();
+    }
+
+    private void DrawTweakOptions()
+    {
+        ImGui.BeginChild("##TweakOptions", new Vector2(0, 0), true);
+
+        if (_selected is not { } tweak)
+        {
+            ImGui.TextDisabled("No tweak selected.");
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.TextUnformatted(tweak.Name);
+        ImGui.TextWrapped(tweak.Description);
+        ImGui.Separator();
+
+        if (!tweak.HasConfig)
+        {
+            ImGui.TextDisabled("This tweak has no options.");
+            ImGui.EndChild();
+            return;
+        }
+
+        // Options stay on screen while the tweak is off so you can see what it offers
+        // before enabling it.
+        ImGui.BeginDisabled(!tweak.Enabled);
+        tweak.DrawConfig();
+        ImGui.EndDisabled();
+
+        ImGui.EndChild();
     }
 
     public void Dispose()

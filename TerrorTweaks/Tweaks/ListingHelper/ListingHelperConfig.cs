@@ -5,7 +5,7 @@ namespace TerrorTweaks.Tweaks.ListingHelper;
 [Serializable]
 public sealed class ListingHelperConfig
 {
-    public int DelayMs { get; set; } = 250;
+    public int DelayMs { get; set; } = 100;
 
     public bool IgnoreQuality { get; set; }
 
@@ -13,7 +13,7 @@ public sealed class ListingHelperConfig
 
     public bool DockToSellList { get; set; } = true;
 
-    public bool LockSize { get; set; }
+    public bool LockSize { get; set; } = true;
 
     public bool LockPosition { get; set; }
 

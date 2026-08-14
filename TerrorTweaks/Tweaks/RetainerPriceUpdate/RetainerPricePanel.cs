@@ -133,7 +133,9 @@ internal sealed class RetainerPricePanel
     private void DrawTable(List<PanelRow> rows)
     {
         const ImGuiTableFlags flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY;
-        var height = ImGui.GetContentRegionAvail().Y - ImGui.GetFrameHeightWithSpacing() * 2;
+        // Whatever the table does not take is what the separator and button row get, so this is
+        // the one place the height of the strip along the bottom is set.
+        var height = ImGui.GetContentRegionAvail().Y - ImGui.GetFrameHeightWithSpacing();
 
         if (!ImGui.BeginTable("##RetainerPriceRows", 4, flags, new Vector2(0, Math.Max(80, height))))
             return;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -18,7 +19,8 @@ internal sealed class ConfigWindow : Window, IDisposable
     private string _search = string.Empty;
     private Tweak? _selected;
     private bool _editingOrder;
-    private (int From, int To)? _pendingMove;
+    private int? _dragSource;
+    private int? _dragTarget;
 
     internal ConfigWindow(TweakManager tweakManager)
         : base("TerrorTweaks - Configuration")
@@ -98,11 +100,15 @@ internal sealed class ConfigWindow : Window, IDisposable
         if (searching)
             _editingOrder = false;
 
+        // Leaving the mode part way through a drag abandons it rather than committing it.
+        if (!_editingOrder)
+            _dragSource = _dragTarget = null;
+
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##TweakSearch", "Search...", ref _search, 64);
         ImGui.Separator();
 
-        var tweaks = _tweakManager.Tweaks;
+        var tweaks = PreviewOrder();
         for (var i = 0; i < tweaks.Count; i++)
         {
             var tweak = tweaks[i];
@@ -113,10 +119,21 @@ internal sealed class ConfigWindow : Window, IDisposable
             if (ImGui.Checkbox($"##Enable{tweak.InternalName}", ref enabled))
                 _tweakManager.SetEnabled(tweak, enabled);
 
+            var held = _dragSource is not null && i == _dragTarget;
+
             // The name is a separate hit target so picking a tweak to configure never
             // toggles it, and toggling never moves the selection.
             ImGui.SameLine();
-            if (ImGui.Selectable($"{tweak.Name}##Select{tweak.InternalName}", _selected == tweak))
+            if (held)
+                ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudYellow);
+
+            var picked = ImGui.Selectable($"{tweak.Name}##Select{tweak.InternalName}", _selected == tweak);
+
+            if (held)
+                ImGui.PopStyleColor();
+
+            // The release that ends a drag lands on a row, so selecting is left to plain clicks.
+            if (picked && _dragSource is null)
             {
                 _selected = tweak;
                 _tweakManager.MarkSeen(tweak);
@@ -129,33 +146,49 @@ internal sealed class ConfigWindow : Window, IDisposable
                 DrawNewBadge();
         }
 
-        ApplyPendingMove();
+        FinishDrag();
 
         ImGui.EndChild();
     }
 
-    // Held-and-dragged off its own row means the row wants to swap with its neighbour. The move
-    // is deferred to the end of the frame so the list isn't reordered while it is being drawn.
-    private void TrackDrag(int index)
+    // What the list would look like if the drag ended now. The real order is left alone until
+    // the mouse is released, so rows don't shuffle themselves out from under the cursor.
+    private IReadOnlyList<Tweak> PreviewOrder()
     {
-        if (!ImGui.IsItemActive() || ImGui.IsItemHovered())
-            return;
+        if (_dragSource is not { } source || _dragTarget is not { } target || source == target)
+            return _tweakManager.Tweaks;
 
-        var target = index + (ImGui.GetMouseDragDelta(ImGuiMouseButton.Left).Y < 0f ? -1 : 1);
-        if (target < 0 || target >= _tweakManager.Tweaks.Count)
-            return;
-
-        _pendingMove = (index, target);
-        ImGui.ResetMouseDragDelta();
+        var preview = new List<Tweak>(_tweakManager.Tweaks);
+        TweakOrdering.Move(preview, source, target);
+        return preview;
     }
 
-    private void ApplyPendingMove()
+    private void TrackDrag(int index)
     {
-        if (_pendingMove is not { } move)
+        if (_dragSource is null)
+        {
+            // Nothing is being dragged yet, so the preview is the real order and this index is too.
+            if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left))
+                _dragSource = _dragTarget = index;
+
+            return;
+        }
+
+        // Hit-testing the rect rather than IsItemHovered, because the held row keeps the hover
+        // to itself for as long as it is active.
+        if (ImGui.IsMouseHoveringRect(ImGui.GetItemRectMin(), ImGui.GetItemRectMax()))
+            _dragTarget = index;
+    }
+
+    private void FinishDrag()
+    {
+        if (_dragSource is not { } source || ImGui.IsMouseDown(ImGuiMouseButton.Left))
             return;
 
-        _tweakManager.MoveTweak(move.From, move.To);
-        _pendingMove = null;
+        if (_dragTarget is { } target && target != source)
+            _tweakManager.MoveTweak(source, target);
+
+        _dragSource = _dragTarget = null;
     }
 
     private static void DrawNewBadge()

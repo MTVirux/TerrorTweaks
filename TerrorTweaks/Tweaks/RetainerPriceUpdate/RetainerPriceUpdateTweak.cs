@@ -829,6 +829,35 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Pins the panel to the right of the retainer window and matches its height.");
 
+        var lockSize = cfg.LockSize;
+        if (ImGui.Checkbox("Lock the panel size##RetainerPrice", ref lockSize))
+        {
+            cfg.LockSize = lockSize;
+            Plugin.Config.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Stops the panel being resized by dragging its corner.");
+
+        // Docking pins the panel itself, so this setting has nothing left to do while it is on.
+        ImGui.BeginDisabled(cfg.DockToSellList);
+
+        var lockPosition = cfg.LockPosition;
+        if (ImGui.Checkbox("Lock the panel position##RetainerPrice", ref lockPosition))
+        {
+            cfg.LockPosition = lockPosition;
+            Plugin.Config.Save();
+        }
+
+        ImGui.EndDisabled();
+
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+        {
+            ImGui.SetTooltip(cfg.DockToSellList
+                ? "Docking already holds the panel in place."
+                : "Stops the panel being dragged around.");
+        }
+
         var ignoreQuality = cfg.IgnoreQuality;
         if (ImGui.Checkbox("Ignore NQ/HQ##RetainerPrice", ref ignoreQuality))
         {

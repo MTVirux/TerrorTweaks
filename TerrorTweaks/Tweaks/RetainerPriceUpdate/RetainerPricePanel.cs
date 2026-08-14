@@ -60,7 +60,15 @@ internal sealed class RetainerPricePanel
         var rows = RetainerPriceUpdateTweak.Rows();
         Prune(rows);
 
+        var cfg = Plugin.Config.RetainerPrice;
         var flags = ImGuiWindowFlags.NoTitleBar | Dock();
+
+        if (cfg.LockSize)
+            flags |= ImGuiWindowFlags.NoResize;
+
+        // Docking already returns NoMove, so this only matters while the panel floats free.
+        if (cfg.LockPosition)
+            flags |= ImGuiWindowFlags.NoMove;
 
         ImGui.SetNextWindowSize(new Vector2(520, DefaultHeight), ImGuiCond.FirstUseEver);
         if (!ImGui.Begin("Retainer Price##TerrorTweaksRetainerPrice", flags))

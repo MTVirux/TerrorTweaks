@@ -13,6 +13,10 @@ public sealed class RetainerPriceConfig
 
     public bool DockToSellList { get; set; } = true;
 
+    public bool LockSize { get; set; }
+
+    public bool LockPosition { get; set; }
+
     public int UndercutGil { get; set; } = 1;
 
     // A market query is a real server request, so lookups are spaced out rather than fired

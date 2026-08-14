@@ -15,8 +15,9 @@ internal sealed class RetainerPricePanel
     private const float PriceColumnWidth = 80f;
     private const float SettingsButtonWidth = 90f;
 
-    private static readonly Vector4 Muted = new(0.65f, 0.65f, 0.65f, 1f);
-    private static readonly Vector4 Held  = new(1f, 0.8f, 0.35f, 1f);
+    private static readonly Vector4 Muted   = new(0.65f, 0.65f, 0.65f, 1f);
+    private static readonly Vector4 Warning = new(1f, 0.8f, 0.35f, 1f);
+    private static readonly Vector4 Info    = new(0.55f, 0.8f, 1f, 1f);
 
     private readonly Dictionary<MarketTarget, int> _inputs = [];
     private readonly Dictionary<MarketTarget, UndercutOutcome> _outcomes = [];
@@ -150,12 +151,16 @@ internal sealed class RetainerPricePanel
         ImGui.TableNextRow();
 
         ImGui.TableNextColumn();
-        ImGui.TextUnformatted(row.Listings > 1 ? $"{row.Name} x{row.Listings}" : row.Name);
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip($"{row.Quantity:N0} in {(row.Listings == 1 ? "1 listing" : $"{row.Listings} listings")}");
+        var outcome = _outcomes.TryGetValue(row.Target, out var found) ? found : (UndercutOutcome?)null;
+        var label = row.Listings > 1 ? $"{row.Name} x{row.Listings}" : row.Name;
 
-        if (_outcomes.TryGetValue(row.Target, out var outcome))
-            DrawOutcome(outcome);
+        if (OutcomeColour(outcome) is { } colour)
+            ImGui.TextColored(colour, label);
+        else
+            ImGui.TextUnformatted(label);
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(Tooltip(row, outcome));
 
         ImGui.TableNextColumn();
         if (row.MixedPrices)
@@ -179,17 +184,26 @@ internal sealed class RetainerPricePanel
             ImGui.SetTooltip("Check the market board for this item and fill in an undercut price.");
     }
 
-    private static void DrawOutcome(UndercutOutcome outcome)
+    // Carried by the item's colour and its tooltip rather than a line of its own, so a verdict
+    // never changes the height of a row.
+    private static Vector4? OutcomeColour(UndercutOutcome? outcome) => outcome switch
     {
-        switch (outcome)
+        UndercutOutcome.NoListings => Warning,
+        UndercutOutcome.HeldAtOwn => Info,
+        _ => null,
+    };
+
+    private static string Tooltip(PanelRow row, UndercutOutcome? outcome)
+    {
+        var listings = row.Listings == 1 ? "1 listing" : $"{row.Listings} listings";
+        var text = $"{row.Quantity:N0} in {listings}";
+
+        return outcome switch
         {
-            case UndercutOutcome.NoListings:
-                ImGui.TextColored(Muted, "nothing listed to undercut");
-                break;
-            case UndercutOutcome.HeldAtOwn:
-                ImGui.TextColored(Held, "your own listing is lowest");
-                break;
-        }
+            UndercutOutcome.NoListings => $"{text}\nNothing listed on the market to undercut.",
+            UndercutOutcome.HeldAtOwn => $"{text}\nYour own retainer is the lowest, so the price was left alone.",
+            _ => text,
+        };
     }
 
     private void DrawButtons(List<PanelRow> rows)

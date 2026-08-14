@@ -1,5 +1,6 @@
 using System;
 using Dalamud.Game.Command;
+using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using TerrorTweaks.Framework;
 using TerrorTweaks.UI;
@@ -16,6 +17,7 @@ public sealed class Plugin : IDalamudPlugin
     private static ConfigWindow? _window;
 
     private readonly IDalamudPluginInterface _pluginInterface;
+    private readonly WindowSystem _windowSystem = new("TerrorTweaks");
     private readonly TweakManager _tweakManager;
     private readonly ConfigWindow _configWindow;
 
@@ -30,6 +32,7 @@ public sealed class Plugin : IDalamudPlugin
         _tweakManager = new TweakManager();
         _configWindow = new ConfigWindow(_tweakManager);
         _window = _configWindow;
+        _windowSystem.AddWindow(_configWindow);
 
         Services.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -41,7 +44,7 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Alias for " + CommandName + ".",
         });
 
-        pluginInterface.UiBuilder.Draw         += _configWindow.Draw;
+        pluginInterface.UiBuilder.Draw         += _windowSystem.Draw;
         pluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         pluginInterface.UiBuilder.OpenMainUi   += OpenConfigUi;
     }
@@ -61,9 +64,10 @@ public sealed class Plugin : IDalamudPlugin
     {
         Services.CommandManager.RemoveHandler(CommandName);
         Services.CommandManager.RemoveHandler(CommandAlias);
-        _pluginInterface.UiBuilder.Draw         -= _configWindow.Draw;
+        _pluginInterface.UiBuilder.Draw         -= _windowSystem.Draw;
         _pluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         _pluginInterface.UiBuilder.OpenMainUi   -= OpenConfigUi;
+        _windowSystem.RemoveAllWindows();
         _window = null;
         _configWindow.Dispose();
         _tweakManager.Dispose();

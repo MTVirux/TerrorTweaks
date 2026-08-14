@@ -2,57 +2,71 @@ using System;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Colors;
+using Dalamud.Interface.Windowing;
 using TerrorTweaks.Framework;
 
 namespace TerrorTweaks.UI;
 
-internal sealed class ConfigWindow : IDisposable
+internal sealed class ConfigWindow : Window, IDisposable
 {
     private const float DefaultListWidth = 180f;
 
     private readonly TweakManager _tweakManager;
-    private bool _isOpen;
+    private readonly TitleBarButton _reorderButton;
     private string _search = string.Empty;
     private Tweak? _selected;
     private bool _editingOrder;
     private (int From, int To)? _pendingMove;
 
     internal ConfigWindow(TweakManager tweakManager)
+        : base("TerrorTweaks - Configuration")
     {
         _tweakManager = tweakManager;
         _selected = _tweakManager.Tweaks.FirstOrDefault();
-    }
 
-    internal bool IsOpen
-    {
-        get => _isOpen;
-        set => _isOpen = value;
-    }
-
-    internal void Toggle() => _isOpen = !_isOpen;
-
-    internal void Draw()
-    {
-        if (!_isOpen)
-            return;
-
-        ImGui.SetNextWindowSize(new Vector2(640, 400), ImGuiCond.FirstUseEver);
-        ImGui.SetNextWindowSizeConstraints(new Vector2(460, 260), new Vector2(float.MaxValue, float.MaxValue));
-
-        if (!ImGui.Begin("TerrorTweaks - Configuration", ref _isOpen))
+        Size = new Vector2(640, 400);
+        SizeCondition = ImGuiCond.FirstUseEver;
+        SizeConstraints = new WindowSizeConstraints
         {
-            ImGui.End();
-            return;
-        }
+            MinimumSize = new Vector2(460, 260),
+            MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
+        };
 
-        DrawBody();
-
-        ImGui.End();
+        _reorderButton = BuildReorderButton();
+        TitleBarButtons.Add(_reorderButton);
     }
+
+    // IconColor is a property rather than a callback, so it is repainted here - before
+    // ImGui.Begin lays the title bar out - to keep it in step with the mode.
+    public override void PreDraw() =>
+        _reorderButton.IconColor = _editingOrder ? ImGuiColors.DalamudYellow : ImGuiColors.DalamudWhite;
+
+    // Reordering is a mode, not a setting: reopening the window should not still be in it.
+    public override void OnClose() => _editingOrder = false;
+
+    private TitleBarButton BuildReorderButton() => new()
+    {
+        Icon = FontAwesomeIcon.Sort,
+        IconOffset = new Vector2(2, 2),
+        Click = button =>
+        {
+            if (button != ImGuiMouseButton.Left)
+                return;
+
+            _editingOrder = !_editingOrder;
+
+            // A filtered list can't express a full ordering, so entering the mode drops the filter.
+            if (_editingOrder)
+                _search = string.Empty;
+        },
+        ShowTooltip = () => ImGui.SetTooltip(_editingOrder ? "Finish reordering" : "Reorder tweaks"),
+    };
 
     // A table rather than two plain children, so the column border doubles as a drag handle and
     // ImGui remembers the width it was dragged to.
-    private void DrawBody()
+    public override void Draw()
     {
         const ImGuiTableFlags flags = ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV;
         var height = ImGui.GetContentRegionAvail().Y - (ImGui.GetStyle().CellPadding.Y * 2);
@@ -78,14 +92,11 @@ internal sealed class ConfigWindow : IDisposable
     {
         ImGui.BeginChild("##TweakList", new Vector2(0, height), true);
 
-        // A filtered list can't express a full ordering, so searching switches reordering off.
+        // The other half of the rule the title bar button applies: a filter arriving while the
+        // mode is on drops the mode instead.
         var searching = _search.Length > 0;
         if (searching)
             _editingOrder = false;
-
-        ImGui.BeginDisabled(searching);
-        ImGui.Checkbox("Edit order", ref _editingOrder);
-        ImGui.EndDisabled();
 
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##TweakSearch", "Search...", ref _search, 64);

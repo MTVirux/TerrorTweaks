@@ -56,6 +56,14 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     // How long the packets have to stop coming before the answer counts as complete.
     private const int PageQuietMs = 1500;
 
+    // The sell list has no mapped struct, so its running order comes out of its AtkValues: one
+    // block per row from this index, whose first Int is the market slot drawn on that row.
+    private const int OrderBaseIndex = 15;
+    private const int OrderStride = 13;
+
+    // The market container is twenty slots, so the window can never draw more rows than that.
+    private const int MaxListings = 20;
+
     // The game's own HQ symbol. Dalamud merges the game symbol font into its default one, so
     // this renders in the panel as well as in chat.
     private const char HighQualityGlyph = (char)SeIconChar.HighQuality;
@@ -706,6 +714,8 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         // tiers of an item collapse into the one row that will reprice all of them.
         var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
         var index = new Dictionary<MarketTarget, int>();
+        var rank = new Dictionary<MarketTarget, int>();
+        var order = SellListOrder(OccupiedSlots(container));
 
         for (var i = 0; i < container->Size; i++)
         {
@@ -717,6 +727,9 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             var target = new MarketTarget(ItemIdNormalizer.ToBaseItemId(item->ItemId), highQuality);
             var price = (int)Math.Clamp(manager->GetRetainerMarketPrice((short)i), 0, int.MaxValue);
 
+            // Anything the window did not place keeps its slot order, behind everything it did.
+            var displayRank = order.TryGetValue(i, out var display) ? display : MaxListings + i;
+
             if (index.TryGetValue(target, out var at))
             {
                 var row = rows[at];
@@ -726,17 +739,63 @@ public sealed class RetainerPriceUpdateTweak : Tweak
                     Quantity = row.Quantity + item->Quantity,
                     MixedPrices = row.MixedPrices || row.CurrentPrice != price,
                 };
+
+                rank[target] = Math.Min(rank[target], displayRank);
                 continue;
             }
 
             index[target] = rows.Count;
+            rank[target] = displayRank;
             rows.Add(new PanelRow(target, ItemName(target.ItemId, highQuality), 1, item->Quantity, price, false));
         }
 
+        // The window sorts by item category rather than by slot, so following the container
+        // would list everything in an order the player is not looking at.
+        rows.Sort((a, b) => rank[a.Target].CompareTo(rank[b.Target]));
         return rows;
     }
 
+    private static unsafe int OccupiedSlots(InventoryContainer* container)
+    {
+        var occupied = 0;
+        for (var i = 0; i < container->Size; i++)
+        {
+            var item = container->GetInventorySlot(i);
+            if (item is not null && item->ItemId != 0)
+                occupied++;
+        }
+
+        return occupied;
+    }
+
     internal static unsafe bool SellListOpen() => LoadedAddon(SellListAddonName) is not null;
+
+    // Maps market slot to the row the window draws it on. The offsets are lifted from a working
+    // plugin rather than from a mapped struct, so a mismatched count is taken as "these are
+    // wrong or not built yet" and the caller falls back to slot order.
+    private static unsafe Dictionary<int, int> SellListOrder(int occupied)
+    {
+        var order = new Dictionary<int, int>();
+        var addon = LoadedAddon(SellListAddonName);
+        if (addon is null || addon->AtkValues is null)
+            return order;
+
+        for (var row = 0; row < MaxListings; row++)
+        {
+            var index = OrderBaseIndex + row * OrderStride;
+            if (index >= addon->AtkValuesCount)
+                break;
+
+            var value = addon->AtkValues[index];
+            if (value.Type == AtkValueType.Int)
+                order.TryAdd(value.Int, row);
+        }
+
+        if (order.Count != occupied)
+            order.Clear();
+
+        return order;
+    }
 
     // Deliberately not gated on visibility: the sell list is flagged invisible behind the
     // dialogs a run drives, and the panel should stay put rather than jump around mid-run.

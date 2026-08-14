@@ -54,7 +54,7 @@ internal sealed class RetainerPricePanel
         var rows = RetainerPriceUpdateTweak.Rows();
         Prune(rows);
 
-        var flags = Dock();
+        var flags = ImGuiWindowFlags.NoTitleBar | Dock();
 
         ImGui.SetNextWindowSize(new Vector2(520, 380), ImGuiCond.FirstUseEver);
         if (!ImGui.Begin("Retainer Price##TerrorTweaksRetainerPrice", flags))

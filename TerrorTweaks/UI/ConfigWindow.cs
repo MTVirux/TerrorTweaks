@@ -8,7 +8,7 @@ namespace TerrorTweaks.UI;
 
 internal sealed class ConfigWindow : IDisposable
 {
-    private const float ListWidth = 180f;
+    private const float DefaultListWidth = 180f;
 
     private readonly TweakManager _tweakManager;
     private bool _isOpen;
@@ -43,16 +43,38 @@ internal sealed class ConfigWindow : IDisposable
             return;
         }
 
-        DrawTweakList();
-        ImGui.SameLine();
-        DrawTweakOptions();
+        DrawBody();
 
         ImGui.End();
     }
 
-    private void DrawTweakList()
+    // A table rather than two plain children, so the column border doubles as a drag handle and
+    // ImGui remembers the width it was dragged to.
+    private void DrawBody()
     {
-        ImGui.BeginChild("##TweakList", new Vector2(ListWidth, 0), true);
+        const ImGuiTableFlags flags = ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV;
+        var height = ImGui.GetContentRegionAvail().Y - (ImGui.GetStyle().CellPadding.Y * 2);
+
+        if (!ImGui.BeginTable("##TweakLayout", 2, flags))
+            return;
+
+        ImGui.TableSetupColumn("##List", ImGuiTableColumnFlags.WidthFixed, DefaultListWidth);
+        ImGui.TableSetupColumn("##Options", ImGuiTableColumnFlags.WidthStretch);
+
+        ImGui.TableNextRow();
+
+        ImGui.TableNextColumn();
+        DrawTweakList(height);
+
+        ImGui.TableNextColumn();
+        DrawTweakOptions(height);
+
+        ImGui.EndTable();
+    }
+
+    private void DrawTweakList(float height)
+    {
+        ImGui.BeginChild("##TweakList", new Vector2(0, height), true);
 
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##TweakSearch", "Search...", ref _search, 64);
@@ -77,9 +99,9 @@ internal sealed class ConfigWindow : IDisposable
         ImGui.EndChild();
     }
 
-    private void DrawTweakOptions()
+    private void DrawTweakOptions(float height)
     {
-        ImGui.BeginChild("##TweakOptions", new Vector2(0, 0), true);
+        ImGui.BeginChild("##TweakOptions", new Vector2(0, height), true);
 
         if (_selected is not { } tweak)
         {

@@ -1,0 +1,225 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+
+namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+
+internal sealed class RetainerPricePanel
+{
+    private const float MinDockedWidth = 320f;
+
+    private static readonly Vector4 Muted = new(0.65f, 0.65f, 0.65f, 1f);
+    private static readonly Vector4 Held  = new(1f, 0.8f, 0.35f, 1f);
+
+    private readonly Dictionary<MarketTarget, int> _inputs = [];
+    private readonly Dictionary<MarketTarget, UndercutOutcome> _outcomes = [];
+    private readonly RetainerPriceUpdateTweak _tweak;
+
+    private ulong _retainerId;
+
+    internal RetainerPricePanel(RetainerPriceUpdateTweak tweak)
+    {
+        _tweak = tweak;
+    }
+
+    internal void SetPrice(MarketTarget target, UndercutResult result)
+    {
+        _outcomes[target] = result.Outcome;
+        if (result.Outcome != UndercutOutcome.NoListings)
+            _inputs[target] = result.Price;
+    }
+
+    internal void Reset()
+    {
+        _inputs.Clear();
+        _outcomes.Clear();
+    }
+
+    internal void Draw()
+    {
+        if (!Plugin.Config.RetainerPrice.ShowPanel || !RetainerPriceUpdateTweak.SellListOpen())
+            return;
+
+        // Two retainers holding the same item would otherwise inherit each other's boxes, and
+        // Apply All would reprice the second one to a number nobody looked at.
+        var retainerId = RetainerPriceUpdateTweak.ActiveRetainerId();
+        if (retainerId != _retainerId)
+        {
+            _retainerId = retainerId;
+            Reset();
+        }
+
+        var rows = RetainerPriceUpdateTweak.Rows();
+        Prune(rows);
+
+        var flags = Dock();
+
+        ImGui.SetNextWindowSize(new Vector2(520, 380), ImGuiCond.FirstUseEver);
+        if (!ImGui.Begin("Retainer Price##TerrorTweaksRetainerPrice", flags))
+        {
+            ImGui.End();
+            return;
+        }
+
+        if (rows.Count == 0)
+            ImGui.TextColored(Muted, "This retainer has nothing on the market.");
+        else
+            DrawTable(rows);
+
+        ImGui.Separator();
+        DrawButtons(rows);
+
+        ImGui.End();
+    }
+
+    // Pinned rather than remembered, so the panel follows the sell list around the screen. The
+    // height is pinned too but the width is left free, which is why this constrains the size
+    // instead of setting it.
+    private static ImGuiWindowFlags Dock()
+    {
+        if (!Plugin.Config.RetainerPrice.DockToSellList)
+            return ImGuiWindowFlags.None;
+
+        if (RetainerPriceUpdateTweak.SellListBounds() is not { } bounds)
+            return ImGuiWindowFlags.None;
+
+        ImGui.SetNextWindowPos(new Vector2(bounds.X + bounds.Width, bounds.Y), ImGuiCond.Always);
+        ImGui.SetNextWindowSizeConstraints(
+            new Vector2(MinDockedWidth, bounds.Height),
+            new Vector2(float.MaxValue, bounds.Height));
+
+        return ImGuiWindowFlags.NoMove;
+    }
+
+    // A listing that sold out and later came back would otherwise reappear holding the price
+    // and the verdict it had before it went away.
+    private void Prune(List<PanelRow> rows)
+    {
+        if (_inputs.Count == 0 && _outcomes.Count == 0)
+            return;
+
+        var live = new HashSet<MarketTarget>(rows.Count);
+        foreach (var row in rows)
+            live.Add(row.Target);
+
+        foreach (var target in _inputs.Keys.Where(target => !live.Contains(target)).ToList())
+            _inputs.Remove(target);
+
+        foreach (var target in _outcomes.Keys.Where(target => !live.Contains(target)).ToList())
+            _outcomes.Remove(target);
+    }
+
+    private void DrawTable(List<PanelRow> rows)
+    {
+        const ImGuiTableFlags flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY;
+        var height = ImGui.GetContentRegionAvail().Y - ImGui.GetFrameHeightWithSpacing() * 2;
+
+        if (!ImGui.BeginTable("##RetainerPriceRows", 4, flags, new Vector2(0, Math.Max(80, height))))
+            return;
+
+        ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn("Now", ImGuiTableColumnFlags.WidthFixed, 80);
+        ImGui.TableSetupColumn("New", ImGuiTableColumnFlags.WidthFixed, 110);
+        ImGui.TableSetupColumn("##Update", ImGuiTableColumnFlags.WidthFixed, 70);
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableHeadersRow();
+
+        var busy = _tweak.IsRunning;
+        foreach (var row in rows)
+            DrawRow(row, busy);
+
+        ImGui.EndTable();
+    }
+
+    private void DrawRow(PanelRow row, bool busy)
+    {
+        var id = $"{row.Target.ItemId}{(row.Target.HighQuality ? "hq" : "nq")}";
+
+        ImGui.TableNextRow();
+
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(row.Listings > 1 ? $"{row.Name} x{row.Listings}" : row.Name);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"{row.Quantity:N0} in {(row.Listings == 1 ? "1 listing" : $"{row.Listings} listings")}");
+
+        if (_outcomes.TryGetValue(row.Target, out var outcome))
+            DrawOutcome(outcome);
+
+        ImGui.TableNextColumn();
+        if (row.MixedPrices)
+            ImGui.TextColored(Muted, "mixed");
+        else
+            ImGui.TextUnformatted($"{row.CurrentPrice:N0}");
+
+        ImGui.TableNextColumn();
+        var price = _inputs.TryGetValue(row.Target, out var stored) ? stored : row.CurrentPrice;
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.InputInt($"##price{id}", ref price, 0))
+            _inputs[row.Target] = Math.Clamp(price, UndercutCalculator.MinPrice, UndercutCalculator.MaxPrice);
+
+        ImGui.TableNextColumn();
+        ImGui.BeginDisabled(busy);
+        if (ImGui.Button($"Update##{id}"))
+            _tweak.RequestPrices([row.Target]);
+        ImGui.EndDisabled();
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Check the market board for this item and fill in an undercut price.");
+    }
+
+    private static void DrawOutcome(UndercutOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case UndercutOutcome.NoListings:
+                ImGui.TextColored(Muted, "nothing listed to undercut");
+                break;
+            case UndercutOutcome.HeldAtOwn:
+                ImGui.TextColored(Held, "your own listing is lowest");
+                break;
+        }
+    }
+
+    private void DrawButtons(List<PanelRow> rows)
+    {
+        if (_tweak.IsRunning)
+        {
+            if (ImGui.Button("Stop##RetainerPricePanel", new Vector2(110, 0)))
+                _tweak.Stop();
+
+            ImGui.SameLine();
+            ImGui.TextColored(Muted, _tweak.Status);
+            return;
+        }
+
+        ImGui.BeginDisabled(rows.Count == 0);
+
+        if (ImGui.Button("Update All##RetainerPricePanel", new Vector2(110, 0)))
+            _tweak.RequestPrices([.. rows.Select(row => row.Target)]);
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"Checks every item not looked up yet, about {Estimate(rows)} at the current delay.");
+
+        ImGui.SameLine();
+        if (ImGui.Button("Apply All##RetainerPricePanel", new Vector2(110, 0)))
+            _tweak.ApplyAll(_inputs);
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Reprices every listing to the value in its box, skipping ones already at it.");
+
+        ImGui.EndDisabled();
+    }
+
+    // Each lookup pays the configured delay plus the sell window and the server round trip.
+    private string Estimate(List<PanelRow> rows)
+    {
+        var pending = rows.Count(row => _tweak.Price(row.Target) is null);
+        if (pending == 0)
+            return "nothing left to check";
+
+        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.RetainerPrice.LookupDelayMs + 4000) / 1000.0);
+        return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
+    }
+}

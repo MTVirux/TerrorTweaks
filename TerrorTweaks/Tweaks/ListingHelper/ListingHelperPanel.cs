@@ -6,9 +6,9 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
-internal sealed class RetainerPricePanel
+internal sealed class ListingHelperPanel
 {
     private const float MinDockedWidth = 320f;
     private const float MinDockedHeight = 140f;
@@ -24,11 +24,11 @@ internal sealed class RetainerPricePanel
 
     private readonly Dictionary<MarketTarget, int> _inputs = [];
     private readonly Dictionary<MarketTarget, UndercutOutcome> _outcomes = [];
-    private readonly RetainerPriceUpdateTweak _tweak;
+    private readonly ListingHelperTweak _tweak;
 
     private ulong _retainerId;
 
-    internal RetainerPricePanel(RetainerPriceUpdateTweak tweak)
+    internal ListingHelperPanel(ListingHelperTweak tweak)
     {
         _tweak = tweak;
     }
@@ -48,22 +48,22 @@ internal sealed class RetainerPricePanel
 
     internal void Draw()
     {
-        if (!Plugin.Config.RetainerPrice.ShowPanel || !RetainerPriceUpdateTweak.SellListOpen())
+        if (!Plugin.Config.ListingHelper.ShowPanel || !ListingHelperTweak.SellListOpen())
             return;
 
         // Two retainers holding the same item would otherwise inherit each other's boxes, and
         // Apply All would reprice the second one to a number nobody looked at.
-        var retainerId = RetainerPriceUpdateTweak.ActiveRetainerId();
+        var retainerId = ListingHelperTweak.ActiveRetainerId();
         if (retainerId != _retainerId)
         {
             _retainerId = retainerId;
             Reset();
         }
 
-        var rows = RetainerPriceUpdateTweak.Rows();
+        var rows = ListingHelperTweak.Rows();
         Prune(rows);
 
-        var cfg = Plugin.Config.RetainerPrice;
+        var cfg = Plugin.Config.ListingHelper;
 
         // The table does the scrolling; the window around it never should, or the two nest and
         // the buttons get pushed out of reach.
@@ -80,7 +80,7 @@ internal sealed class RetainerPricePanel
             flags |= ImGuiWindowFlags.NoMove;
 
         ImGui.SetNextWindowSize(new Vector2(520, DefaultHeight), ImGuiCond.FirstUseEver);
-        if (!ImGui.Begin("Retainer Price##TerrorTweaksRetainerPrice", flags))
+        if (!ImGui.Begin("Listing Helper##TerrorTweaksListingHelper", flags))
         {
             ImGui.End();
             return;
@@ -104,10 +104,10 @@ internal sealed class RetainerPricePanel
     // offset is hand-tuned: the addon reports a top edge above where its frame actually draws.
     private static ImGuiWindowFlags Dock()
     {
-        if (!Plugin.Config.RetainerPrice.DockToSellList)
+        if (!Plugin.Config.ListingHelper.DockToSellList)
             return ImGuiWindowFlags.None;
 
-        if (RetainerPriceUpdateTweak.SellListBounds() is not { } bounds)
+        if (ListingHelperTweak.SellListBounds() is not { } bounds)
             return ImGuiWindowFlags.None;
 
         ImGui.SetNextWindowPos(
@@ -150,7 +150,7 @@ internal sealed class RetainerPricePanel
         // instead of overflowing and handing the scrollbar back to the window.
         var outer = new Vector2(0, Math.Max(ImGui.GetTextLineHeightWithSpacing(), height));
 
-        if (!ImGui.BeginTable("##RetainerPriceRows", 4, flags, outer))
+        if (!ImGui.BeginTable("##ListingHelperRows", 4, flags, outer))
             return;
 
         ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
@@ -250,7 +250,7 @@ internal sealed class RetainerPricePanel
     {
         if (_tweak.IsRunning)
         {
-            if (ImGui.Button("Stop##RetainerPricePanel", new Vector2(110, 0)))
+            if (ImGui.Button("Stop##ListingHelperPanel", new Vector2(110, 0)))
                 _tweak.Stop();
 
             ImGui.SameLine();
@@ -260,14 +260,14 @@ internal sealed class RetainerPricePanel
         {
             ImGui.BeginDisabled(rows.Count == 0);
 
-            if (ImGui.Button("Update All##RetainerPricePanel", new Vector2(110, 0)))
+            if (ImGui.Button("Update All##ListingHelperPanel", new Vector2(110, 0)))
                 _tweak.RequestPrices([.. rows.Select(row => row.Target)]);
 
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip($"Checks every item not looked up yet, about {Estimate(rows)} at the current delay.");
 
             ImGui.SameLine();
-            if (ImGui.Button("Apply All##RetainerPricePanel", new Vector2(110, 0)))
+            if (ImGui.Button("Apply All##ListingHelperPanel", new Vector2(110, 0)))
                 _tweak.ApplyAll(_inputs);
 
             if (ImGui.IsItemHovered())
@@ -284,7 +284,7 @@ internal sealed class RetainerPricePanel
         ImGui.SameLine();
         ImGui.SetCursorPosX(ImGui.GetWindowWidth() - SettingsButtonWidth - ImGui.GetStyle().WindowPadding.X);
 
-        if (ImGui.Button("Settings##RetainerPricePanel", new Vector2(SettingsButtonWidth, 0)))
+        if (ImGui.Button("Settings##ListingHelperPanel", new Vector2(SettingsButtonWidth, 0)))
             Plugin.OpenConfig();
 
         if (ImGui.IsItemHovered())
@@ -298,7 +298,7 @@ internal sealed class RetainerPricePanel
         if (pending == 0)
             return "nothing left to check";
 
-        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.RetainerPrice.LookupDelayMs + 4000) / 1000.0);
+        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.ListingHelper.LookupDelayMs + 4000) / 1000.0);
         return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
     }
 }

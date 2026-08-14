@@ -1,6 +1,6 @@
 using System;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
 internal static class ClipboardPrice
 {

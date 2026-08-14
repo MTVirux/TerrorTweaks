@@ -13,7 +13,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using TerrorTweaks.Framework;
 using TerrorTweaks.Util;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
 internal readonly record struct MarketTarget(uint ItemId, bool HighQuality);
 
@@ -27,7 +27,7 @@ internal readonly record struct PanelRow(
     int CurrentPrice,
     bool MixedPrices);
 
-public sealed class RetainerPriceUpdateTweak : Tweak
+public sealed class ListingHelperTweak : Tweak
 {
     private const string SellListAddonName = "RetainerSellList";
     private const string SellAddonName = "RetainerSell";
@@ -95,7 +95,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     private readonly HashSet<ulong> _ownRetainers = [];
     private readonly MarketLookup _lookup = new();
     private readonly List<Job> _jobs = [];
-    private readonly RetainerPricePanel _panel;
+    private readonly ListingHelperPanel _panel;
 
     private RunMode _mode;
     private string _runLabel = string.Empty;
@@ -112,12 +112,12 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     // would land on whatever has opened behind it.
     private bool _cancelFired;
 
-    public RetainerPriceUpdateTweak()
+    public ListingHelperTweak()
     {
-        _panel = new RetainerPricePanel(this);
+        _panel = new ListingHelperPanel(this);
     }
 
-    public override string Name => "Retainer Price Update";
+    public override string Name => "Listing Helper";
 
     public override string Description =>
         "Adds an \"Update entries of this item\" entry to the retainer sell list that reprices " +
@@ -178,15 +178,15 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         var clipboard = ImGui.GetClipboardText() ?? string.Empty;
         if (!ClipboardPrice.TryParse(clipboard, out var price))
         {
-            Services.Chat.PrintError($"Retainer Price: the clipboard does not hold a price ({QuoteClipboard(clipboard)}).");
+            Services.Chat.PrintError($"Listing Helper: the clipboard does not hold a price ({QuoteClipboard(clipboard)}).");
             return;
         }
 
-        var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
+        var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
         var slots = FindSlots(target, ignoreQuality);
         if (slots.Count == 0)
         {
-            Services.Chat.PrintError("Retainer Price: this retainer has no listing of that item.");
+            Services.Chat.PrintError("Listing Helper: this retainer has no listing of that item.");
             return;
         }
 
@@ -203,7 +203,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (!CanStart())
             return;
 
-        var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
+        var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
         var jobs = new List<Job>();
         var items = 0;
 
@@ -228,7 +228,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
         if (jobs.Count == 0)
         {
-            Services.Chat.Print("Retainer Price: nothing to apply - every listing is already at its price.");
+            Services.Chat.Print("Listing Helper: nothing to apply - every listing is already at its price.");
             return;
         }
 
@@ -240,11 +240,11 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (!CanStart())
             return;
 
-        var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
+        var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
         var slots = FindSlots(target, ignoreQuality);
         if (slots.Count == 0)
         {
-            Services.Chat.PrintError("Retainer Price: this retainer has no listing of that item.");
+            Services.Chat.PrintError("Listing Helper: this retainer has no listing of that item.");
             return;
         }
 
@@ -261,7 +261,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (!CanStart())
             return;
 
-        var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
+        var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
         var jobs = new List<Job>();
 
         RefreshOwnRetainers();
@@ -292,7 +292,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (!_running)
             return true;
 
-        Services.Chat.Print("Retainer Price: the last run is still going.");
+        Services.Chat.Print("Listing Helper: the last run is still going.");
         return false;
     }
 
@@ -313,8 +313,8 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
         Services.Framework.Update += OnFrameworkUpdate;
         Services.Chat.Print(mode == RunMode.Reprice
-            ? $"Retainer Price: setting {label}."
-            : $"Retainer Price: checking market prices for {label}.");
+            ? $"Listing Helper: setting {label}."
+            : $"Listing Helper: checking market prices for {label}.");
     }
 
     internal void Stop()
@@ -468,7 +468,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             return;
 
         var entries = MenuEntries(menu);
-        Services.Log.Debug($"Retainer Price: context menu held [{string.Join(" | ", entries)}]");
+        Services.Log.Debug($"Listing Helper: context menu held [{string.Join(" | ", entries)}]");
 
         var entry = entries.FindIndex(IsReturnEntry);
         if (entry < 0)
@@ -577,7 +577,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         // selling, so this one is reported but never cached - Update has to be able to retry.
         if (timedOut && _lookup.Listings.Count == 0)
         {
-            Services.Log.Debug($"Retainer Price: no listings arrived for item {target.ItemId}.");
+            Services.Log.Debug($"Listing Helper: no listings arrived for item {target.ItemId}.");
             _panel.SetPrice(target, new UndercutResult(UndercutOutcome.NoListings, 0));
             return;
         }
@@ -631,7 +631,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             return;
         }
 
-        var cfg = Plugin.Config.RetainerPrice;
+        var cfg = Plugin.Config.ListingHelper;
         var delay = _mode == RunMode.Reprice ? cfg.DelayMs : cfg.LookupDelayMs;
         _resumeAt = Environment.TickCount64 + Math.Max(0, delay);
         BeginStep(Step.OpenMenu);
@@ -649,7 +649,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (!_cache.TryGetValue(target, out var listings))
             return null;
 
-        var cfg = Plugin.Config.RetainerPrice;
+        var cfg = Plugin.Config.ListingHelper;
 
         // A run's rows were keyed under the setting it started with, so it keeps pricing under
         // that one - a mid-run toggle would otherwise drop an NQ price into an HQ box.
@@ -684,22 +684,22 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (_mode == RunMode.Lookup)
         {
             Services.Chat.Print(reason is null
-                ? $"Retainer Price: checked market prices for {_runLabel}."
-                : $"Retainer Price: stopped checking prices - {reason}.");
+                ? $"Listing Helper: checked market prices for {_runLabel}."
+                : $"Listing Helper: stopped checking prices - {reason}.");
             return;
         }
 
         if (_mode == RunMode.Remove)
         {
             Services.Chat.Print(reason is null
-                ? $"Retainer Price: took {_runLabel} off the market."
-                : $"Retainer Price: stopped after removing {Listings(_updated)} - {reason}.");
+                ? $"Listing Helper: took {_runLabel} off the market."
+                : $"Listing Helper: stopped after removing {Listings(_updated)} - {reason}.");
             return;
         }
 
         Services.Chat.Print(reason is null
-            ? $"Retainer Price: updated {_runLabel}."
-            : $"Retainer Price: stopped after {Listings(_updated)} - {reason}.");
+            ? $"Listing Helper: updated {_runLabel}."
+            : $"Listing Helper: stopped after {Listings(_updated)} - {reason}.");
     }
 
     internal static unsafe List<PanelRow> Rows()
@@ -712,7 +712,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
         // With quality ignored a listing's HQ flag stops being part of its identity, so both
         // tiers of an item collapse into the one row that will reprice all of them.
-        var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
+        var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
         var index = new Dictionary<MarketTarget, int>();
         var rank = new Dictionary<MarketTarget, int>();
         var order = SellListOrder(OccupiedSlots(container));
@@ -914,7 +914,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         if (addon is null)
             return;
 
-        Services.Log.Warning($"Retainer Price: {name} ignored its cancel callback, closing it directly.");
+        Services.Log.Warning($"Listing Helper: {name} ignored its cancel callback, closing it directly.");
         addon->Close(true);
     }
 
@@ -972,21 +972,21 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     // The adjust-price entry is assumed to be first; logging what the menu actually held makes
     // a wrong pick obvious in the log instead of silent.
     private static unsafe void LogMenuEntries(AtkUnitBase* menu) =>
-        Services.Log.Debug($"Retainer Price: context menu held [{string.Join(" | ", MenuEntries(menu))}]");
+        Services.Log.Debug($"Listing Helper: context menu held [{string.Join(" | ", MenuEntries(menu))}]");
 
     public override void DrawConfig()
     {
-        var cfg = Plugin.Config.RetainerPrice;
+        var cfg = Plugin.Config.ListingHelper;
 
         var showPanel = cfg.ShowPanel;
-        if (ImGui.Checkbox("Show panel at the retainer sell list##RetainerPrice", ref showPanel))
+        if (ImGui.Checkbox("Show panel at the retainer sell list##ListingHelper", ref showPanel))
         {
             cfg.ShowPanel = showPanel;
             Plugin.Config.Save();
         }
 
         var dock = cfg.DockToSellList;
-        if (ImGui.Checkbox("Dock it to the sell list##RetainerPrice", ref dock))
+        if (ImGui.Checkbox("Dock it to the sell list##ListingHelper", ref dock))
         {
             cfg.DockToSellList = dock;
             Plugin.Config.Save();
@@ -996,7 +996,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             ImGui.SetTooltip("Pins the panel to the right of the retainer window and matches its height.");
 
         var lockSize = cfg.LockSize;
-        if (ImGui.Checkbox("Lock the panel size##RetainerPrice", ref lockSize))
+        if (ImGui.Checkbox("Lock the panel size##ListingHelper", ref lockSize))
         {
             cfg.LockSize = lockSize;
             Plugin.Config.Save();
@@ -1009,7 +1009,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         ImGui.BeginDisabled(cfg.DockToSellList);
 
         var lockPosition = cfg.LockPosition;
-        if (ImGui.Checkbox("Lock the panel position##RetainerPrice", ref lockPosition))
+        if (ImGui.Checkbox("Lock the panel position##ListingHelper", ref lockPosition))
         {
             cfg.LockPosition = lockPosition;
             Plugin.Config.Save();
@@ -1025,7 +1025,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         }
 
         var ignoreQuality = cfg.IgnoreQuality;
-        if (ImGui.Checkbox("Ignore NQ/HQ##RetainerPrice", ref ignoreQuality))
+        if (ImGui.Checkbox("Ignore NQ/HQ##ListingHelper", ref ignoreQuality))
         {
             cfg.IgnoreQuality = ignoreQuality;
             Plugin.Config.Save();
@@ -1040,7 +1040,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
         var undercut = cfg.UndercutGil;
         ImGui.SetNextItemWidth(160);
-        if (ImGui.InputInt("Undercut by (gil)##RetainerPrice", ref undercut))
+        if (ImGui.InputInt("Undercut by (gil)##ListingHelper", ref undercut))
         {
             cfg.UndercutGil = Math.Clamp(undercut, 0, UndercutCalculator.MaxPrice);
             Plugin.Config.Save();
@@ -1051,7 +1051,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
         var delay = cfg.DelayMs;
         ImGui.SetNextItemWidth(160);
-        if (ImGui.SliderInt("Delay between listings (ms)##RetainerPrice", ref delay, 100, 3000))
+        if (ImGui.SliderInt("Delay between listings (ms)##ListingHelper", ref delay, 100, 3000))
         {
             cfg.DelayMs = delay;
             Plugin.Config.Save();
@@ -1062,7 +1062,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
         var lookupDelay = cfg.LookupDelayMs;
         ImGui.SetNextItemWidth(160);
-        if (ImGui.SliderInt("Delay between price checks (ms)##RetainerPrice", ref lookupDelay, 1000, 10000))
+        if (ImGui.SliderInt("Delay between price checks (ms)##ListingHelper", ref lookupDelay, 1000, 10000))
         {
             cfg.LookupDelayMs = lookupDelay;
             Plugin.Config.Save();

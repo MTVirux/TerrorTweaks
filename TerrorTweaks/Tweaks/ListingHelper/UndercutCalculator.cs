@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
 internal readonly record struct MarketListing(uint PricePerUnit, bool HighQuality, ulong RetainerId);
 

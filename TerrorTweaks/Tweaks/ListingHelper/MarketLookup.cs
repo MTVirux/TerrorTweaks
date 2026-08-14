@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Dalamud.Game.Network.Structures;
 using TerrorTweaks.Util;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
 internal sealed class MarketLookup
 {

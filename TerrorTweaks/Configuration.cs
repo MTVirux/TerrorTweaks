@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Dalamud.Configuration;
 using TerrorTweaks.Tweaks.BulkPurchase;
 using TerrorTweaks.Tweaks.JobRoulette;
-using TerrorTweaks.Tweaks.RetainerPriceUpdate;
+using TerrorTweaks.Tweaks.ListingHelper;
 
 namespace TerrorTweaks;
 
@@ -18,7 +18,7 @@ public sealed class Configuration : IPluginConfiguration
 
     public BulkPurchaseConfig BulkPurchase { get; set; } = new();
 
-    public RetainerPriceConfig RetainerPrice { get; set; } = new();
+    public ListingHelperConfig ListingHelper { get; set; } = new();
 
     public void Save() => Services.PluginInterface.SavePluginConfig(this);
 }

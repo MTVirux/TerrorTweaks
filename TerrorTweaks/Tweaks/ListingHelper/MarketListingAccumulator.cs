@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
 internal sealed class MarketListingAccumulator
 {

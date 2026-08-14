@@ -1,9 +1,9 @@
 using System;
 
-namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
+namespace TerrorTweaks.Tweaks.ListingHelper;
 
 [Serializable]
-public sealed class RetainerPriceConfig
+public sealed class ListingHelperConfig
 {
     public int DelayMs { get; set; } = 250;
 

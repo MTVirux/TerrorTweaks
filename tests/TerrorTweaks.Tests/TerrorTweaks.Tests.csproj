@@ -23,9 +23,9 @@
     <Compile Include="..\..\TerrorTweaks\Tweaks\JobRoulette\GearsetRoulette.cs" Link="GearsetRoulette.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\JobRoulette\JobCategoryParser.cs" Link="JobCategoryParser.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\BulkPurchase\BulkPurchasePlan.cs" Link="BulkPurchasePlan.cs" />
-    <Compile Include="..\..\TerrorTweaks\Tweaks\RetainerPriceUpdate\ClipboardPrice.cs" Link="ClipboardPrice.cs" />
-    <Compile Include="..\..\TerrorTweaks\Tweaks\RetainerPriceUpdate\UndercutCalculator.cs" Link="UndercutCalculator.cs" />
-    <Compile Include="..\..\TerrorTweaks\Tweaks\RetainerPriceUpdate\MarketListingAccumulator.cs" Link="MarketListingAccumulator.cs" />
+    <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\ClipboardPrice.cs" Link="ClipboardPrice.cs" />
+    <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\UndercutCalculator.cs" Link="UndercutCalculator.cs" />
+    <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\MarketListingAccumulator.cs" Link="MarketListingAccumulator.cs" />
   </ItemGroup>
 
 </Project>

@@ -13,6 +13,8 @@ public sealed class Plugin : IDalamudPlugin
 
     internal static Configuration Config { get; private set; } = null!;
 
+    private static ConfigWindow? _window;
+
     private readonly IDalamudPluginInterface _pluginInterface;
     private readonly TweakManager _tweakManager;
     private readonly ConfigWindow _configWindow;
@@ -27,6 +29,7 @@ public sealed class Plugin : IDalamudPlugin
 
         _tweakManager = new TweakManager();
         _configWindow = new ConfigWindow(_tweakManager);
+        _window = _configWindow;
 
         Services.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -47,6 +50,13 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OpenConfigUi() => _configWindow.IsOpen = true;
 
+    // Lets a tweak's own window offer a way into the settings without reaching for the command.
+    internal static void OpenConfig()
+    {
+        if (_window is not null)
+            _window.IsOpen = true;
+    }
+
     public void Dispose()
     {
         Services.CommandManager.RemoveHandler(CommandName);
@@ -54,6 +64,7 @@ public sealed class Plugin : IDalamudPlugin
         _pluginInterface.UiBuilder.Draw         -= _configWindow.Draw;
         _pluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         _pluginInterface.UiBuilder.OpenMainUi   -= OpenConfigUi;
+        _window = null;
         _configWindow.Dispose();
         _tweakManager.Dispose();
         MenuPrefix.Unregister();

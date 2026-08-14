@@ -12,6 +12,8 @@ internal sealed class RetainerPricePanel
     private const float MinDockedHeight = 140f;
     private const float DefaultHeight = 380f;
     private const float DockOffsetY = 25f;
+    private const float PriceColumnWidth = 80f;
+    private const float SettingsButtonWidth = 90f;
 
     private static readonly Vector4 Muted = new(0.65f, 0.65f, 0.65f, 1f);
     private static readonly Vector4 Held  = new(1f, 0.8f, 0.35f, 1f);
@@ -128,8 +130,8 @@ internal sealed class RetainerPricePanel
             return;
 
         ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-        ImGui.TableSetupColumn("Now", ImGuiTableColumnFlags.WidthFixed, 80);
-        ImGui.TableSetupColumn("New", ImGuiTableColumnFlags.WidthFixed, 110);
+        ImGui.TableSetupColumn("Now", ImGuiTableColumnFlags.WidthFixed, PriceColumnWidth);
+        ImGui.TableSetupColumn("New", ImGuiTableColumnFlags.WidthFixed, PriceColumnWidth);
         ImGui.TableSetupColumn("##Update", ImGuiTableColumnFlags.WidthFixed, 70);
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
@@ -199,25 +201,40 @@ internal sealed class RetainerPricePanel
 
             ImGui.SameLine();
             ImGui.TextColored(Muted, _tweak.Status);
-            return;
+        }
+        else
+        {
+            ImGui.BeginDisabled(rows.Count == 0);
+
+            if (ImGui.Button("Update All##RetainerPricePanel", new Vector2(110, 0)))
+                _tweak.RequestPrices([.. rows.Select(row => row.Target)]);
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Checks every item not looked up yet, about {Estimate(rows)} at the current delay.");
+
+            ImGui.SameLine();
+            if (ImGui.Button("Apply All##RetainerPricePanel", new Vector2(110, 0)))
+                _tweak.ApplyAll(_inputs);
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Reprices every listing to the value in its box, skipping ones already at it.");
+
+            ImGui.EndDisabled();
         }
 
-        ImGui.BeginDisabled(rows.Count == 0);
+        DrawSettingsButton();
+    }
 
-        if (ImGui.Button("Update All##RetainerPricePanel", new Vector2(110, 0)))
-            _tweak.RequestPrices([.. rows.Select(row => row.Target)]);
-
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip($"Checks every item not looked up yet, about {Estimate(rows)} at the current delay.");
-
+    private static void DrawSettingsButton()
+    {
         ImGui.SameLine();
-        if (ImGui.Button("Apply All##RetainerPricePanel", new Vector2(110, 0)))
-            _tweak.ApplyAll(_inputs);
+        ImGui.SetCursorPosX(ImGui.GetWindowWidth() - SettingsButtonWidth - ImGui.GetStyle().WindowPadding.X);
+
+        if (ImGui.Button("Settings##RetainerPricePanel", new Vector2(SettingsButtonWidth, 0)))
+            Plugin.OpenConfig();
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Reprices every listing to the value in its box, skipping ones already at it.");
-
-        ImGui.EndDisabled();
+            ImGui.SetTooltip("Open the TerrorTweaks settings window.");
     }
 
     // Each lookup pays the configured delay plus the sell window and the server round trip.

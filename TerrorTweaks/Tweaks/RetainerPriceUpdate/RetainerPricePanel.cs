@@ -63,6 +63,9 @@ internal sealed class RetainerPricePanel
             return;
         }
 
+        ImGui.TextUnformatted("Terror Tweaks Listing Helper");
+        ImGui.Separator();
+
         if (rows.Count == 0)
             ImGui.TextColored(Muted, "This retainer has nothing on the market.");
         else

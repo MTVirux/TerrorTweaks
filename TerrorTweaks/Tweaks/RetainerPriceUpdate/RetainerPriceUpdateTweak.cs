@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Inventory;
+using Dalamud.Game.Text;
 using Dalamud.Memory;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -54,6 +55,10 @@ public sealed class RetainerPriceUpdateTweak : Tweak
 
     // How long the packets have to stop coming before the answer counts as complete.
     private const int PageQuietMs = 1500;
+
+    // The game's own HQ symbol. Dalamud merges the game symbol font into its default one, so
+    // this renders in the panel as well as in chat.
+    private const char HighQualityGlyph = (char)SeIconChar.HighQuality;
 
     private enum RunMode
     {
@@ -761,7 +766,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     internal static string ItemName(uint itemId, bool highQuality)
     {
         var name = ItemNames.Lookup(itemId);
-        return highQuality ? $"{name} (HQ)" : name;
+        return highQuality ? $"{name} {HighQualityGlyph}" : name;
     }
 
     private static string Listings(int count) => count == 1 ? "1 listing" : $"{count} listings";

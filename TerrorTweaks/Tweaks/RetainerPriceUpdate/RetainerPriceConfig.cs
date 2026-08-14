@@ -17,5 +17,5 @@ public sealed class RetainerPriceConfig
 
     // A market query is a real server request, so lookups are spaced out rather than fired
     // back to back - a throttled request never answers at all.
-    public int LookupDelayMs { get; set; } = 2000;
+    public int LookupDelayMs { get; set; } = 3000;
 }

@@ -14,6 +14,10 @@ public sealed class Configuration : IPluginConfiguration
 
     public HashSet<string> EnabledTweaks { get; set; } = [];
 
+    public List<string> TweakOrder { get; set; } = [];
+
+    public HashSet<string> SeenTweaks { get; set; } = [];
+
     public JobRouletteConfig JobRoulette { get; set; } = new();
 
     public BulkPurchaseConfig BulkPurchase { get; set; } = new();

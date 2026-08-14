@@ -26,8 +26,50 @@ internal sealed class TweakManager : IDisposable
             }
         }
 
+        ApplySavedOrder();
+
         foreach (var tweak in _tweaks.Where(t => Plugin.Config.EnabledTweaks.Contains(t.InternalName)))
             SafeEnable(tweak);
+    }
+
+    public bool IsNew(Tweak tweak) => !Plugin.Config.SeenTweaks.Contains(tweak.InternalName);
+
+    public void MarkSeen(Tweak tweak)
+    {
+        if (Plugin.Config.SeenTweaks.Add(tweak.InternalName))
+            Plugin.Config.Save();
+    }
+
+    public void MoveTweak(int from, int to)
+    {
+        TweakOrdering.Move(_tweaks, from, to);
+        Plugin.Config.TweakOrder = [.. _tweaks.Select(t => t.InternalName)];
+        Plugin.Config.Save();
+    }
+
+    private void ApplySavedOrder()
+    {
+        var config = Plugin.Config;
+        var present = _tweaks.Select(t => t.InternalName).ToList();
+
+        // No saved order means this config predates ordering, so everything here is already
+        // familiar - marking it seen keeps an upgrade from lighting up every row as new.
+        if (config.TweakOrder.Count == 0)
+            config.SeenTweaks.UnionWith(present);
+
+        var arranged = TweakOrdering.Arrange(config.TweakOrder, present);
+        if (arranged.SequenceEqual(config.TweakOrder))
+            return;
+
+        var byName = new Dictionary<string, Tweak>(StringComparer.Ordinal);
+        foreach (var tweak in _tweaks)
+            byName[tweak.InternalName] = tweak;
+
+        _tweaks.Clear();
+        _tweaks.AddRange(arranged.Select(name => byName[name]));
+
+        config.TweakOrder = arranged;
+        config.Save();
     }
 
     public void SetEnabled(Tweak tweak, bool enabled)

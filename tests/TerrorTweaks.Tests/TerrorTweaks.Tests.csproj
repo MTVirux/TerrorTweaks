@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\TerrorTweaks\Util\ItemIdNormalizer.cs" Link="ItemIdNormalizer.cs" />
+    <Compile Include="..\..\TerrorTweaks\Framework\TweakOrdering.cs" Link="TweakOrdering.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\JobRoulette\JobClassifier.cs" Link="JobClassifier.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\JobRoulette\GearsetRoulette.cs" Link="GearsetRoulette.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\JobRoulette\JobCategoryParser.cs" Link="JobCategoryParser.cs" />

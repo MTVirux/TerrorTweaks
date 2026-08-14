@@ -14,6 +14,8 @@ internal sealed class ConfigWindow : IDisposable
     private bool _isOpen;
     private string _search = string.Empty;
     private Tweak? _selected;
+    private bool _editingOrder;
+    private (int From, int To)? _pendingMove;
 
     internal ConfigWindow(TweakManager tweakManager)
     {
@@ -76,13 +78,24 @@ internal sealed class ConfigWindow : IDisposable
     {
         ImGui.BeginChild("##TweakList", new Vector2(0, height), true);
 
+        // A filtered list can't express a full ordering, so searching switches reordering off.
+        var searching = _search.Length > 0;
+        if (searching)
+            _editingOrder = false;
+
+        ImGui.BeginDisabled(searching);
+        ImGui.Checkbox("Edit order", ref _editingOrder);
+        ImGui.EndDisabled();
+
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##TweakSearch", "Search...", ref _search, 64);
         ImGui.Separator();
 
-        foreach (var tweak in _tweakManager.Tweaks)
+        var tweaks = _tweakManager.Tweaks;
+        for (var i = 0; i < tweaks.Count; i++)
         {
-            if (_search.Length > 0 && !tweak.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            var tweak = tweaks[i];
+            if (searching && !tweak.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var enabled = tweak.Enabled;
@@ -93,10 +106,63 @@ internal sealed class ConfigWindow : IDisposable
             // toggles it, and toggling never moves the selection.
             ImGui.SameLine();
             if (ImGui.Selectable($"{tweak.Name}##Select{tweak.InternalName}", _selected == tweak))
+            {
                 _selected = tweak;
+                _tweakManager.MarkSeen(tweak);
+            }
+
+            if (_editingOrder)
+                TrackDrag(i);
+
+            if (_tweakManager.IsNew(tweak))
+                DrawNewBadge();
         }
 
+        ApplyPendingMove();
+
         ImGui.EndChild();
+    }
+
+    // Held-and-dragged off its own row means the row wants to swap with its neighbour. The move
+    // is deferred to the end of the frame so the list isn't reordered while it is being drawn.
+    private void TrackDrag(int index)
+    {
+        if (!ImGui.IsItemActive() || ImGui.IsItemHovered())
+            return;
+
+        var target = index + (ImGui.GetMouseDragDelta(ImGuiMouseButton.Left).Y < 0f ? -1 : 1);
+        if (target < 0 || target >= _tweakManager.Tweaks.Count)
+            return;
+
+        _pendingMove = (index, target);
+        ImGui.ResetMouseDragDelta();
+    }
+
+    private void ApplyPendingMove()
+    {
+        if (_pendingMove is not { } move)
+            return;
+
+        _tweakManager.MoveTweak(move.From, move.To);
+        _pendingMove = null;
+    }
+
+    private static void DrawNewBadge()
+    {
+        const string label = "NEW";
+        var width = ImGui.CalcTextSize(label).X;
+
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - width);
+        ImGui.TextColored(RainbowColor(), label);
+    }
+
+    private static Vector4 RainbowColor()
+    {
+        var hue = (float)(ImGui.GetTime() * 0.4 % 1.0);
+        float r = 0, g = 0, b = 0;
+
+        ImGui.ColorConvertHSVtoRGB(hue, 0.8f, 1f, ref r, ref g, ref b);
+        return new Vector4(r, g, b, 1f);
     }
 
     private void DrawTweakOptions(float height)

@@ -61,7 +61,13 @@ internal sealed class RetainerPricePanel
         Prune(rows);
 
         var cfg = Plugin.Config.RetainerPrice;
-        var flags = ImGuiWindowFlags.NoTitleBar | Dock();
+
+        // The table does the scrolling; the window around it never should, or the two nest and
+        // the buttons get pushed out of reach.
+        var flags = ImGuiWindowFlags.NoTitleBar
+                    | ImGuiWindowFlags.NoScrollbar
+                    | ImGuiWindowFlags.NoScrollWithMouse
+                    | Dock();
 
         if (cfg.LockSize)
             flags |= ImGuiWindowFlags.NoResize;
@@ -137,7 +143,11 @@ internal sealed class RetainerPricePanel
         // the one place the height of the strip along the bottom is set.
         var height = ImGui.GetContentRegionAvail().Y - ImGui.GetFrameHeightWithSpacing();
 
-        if (!ImGui.BeginTable("##RetainerPriceRows", 4, flags, new Vector2(0, Math.Max(80, height))))
+        // Floored at a single row rather than a fixed size, so a short window shrinks the table
+        // instead of overflowing and handing the scrollbar back to the window.
+        var outer = new Vector2(0, Math.Max(ImGui.GetTextLineHeightWithSpacing(), height));
+
+        if (!ImGui.BeginTable("##RetainerPriceRows", 4, flags, outer))
             return;
 
         ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);

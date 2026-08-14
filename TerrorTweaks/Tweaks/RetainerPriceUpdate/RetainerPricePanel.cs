@@ -9,6 +9,8 @@ namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
 internal sealed class RetainerPricePanel
 {
     private const float MinDockedWidth = 320f;
+    private const float MinDockedHeight = 140f;
+    private const float DefaultHeight = 380f;
 
     private static readonly Vector4 Muted = new(0.65f, 0.65f, 0.65f, 1f);
     private static readonly Vector4 Held  = new(1f, 0.8f, 0.35f, 1f);
@@ -18,6 +20,7 @@ internal sealed class RetainerPricePanel
     private readonly RetainerPriceUpdateTweak _tweak;
 
     private ulong _retainerId;
+    private float _height;
 
     internal RetainerPricePanel(RetainerPriceUpdateTweak tweak)
     {
@@ -56,7 +59,7 @@ internal sealed class RetainerPricePanel
 
         var flags = ImGuiWindowFlags.NoTitleBar | Dock();
 
-        ImGui.SetNextWindowSize(new Vector2(520, 380), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(520, DefaultHeight), ImGuiCond.FirstUseEver);
         if (!ImGui.Begin("Retainer Price##TerrorTweaksRetainerPrice", flags))
         {
             ImGui.End();
@@ -74,13 +77,15 @@ internal sealed class RetainerPricePanel
         ImGui.Separator();
         DrawButtons(rows);
 
+        _height = ImGui.GetWindowSize().Y;
+
         ImGui.End();
     }
 
-    // Pinned rather than remembered, so the panel follows the sell list around the screen. The
-    // height is pinned too but the width is left free, which is why this constrains the size
-    // instead of setting it.
-    private static ImGuiWindowFlags Dock()
+    // Pinned rather than remembered, so the panel follows the sell list around the screen. It
+    // hangs off the sell list's foot, so the position depends on the panel's own height, which
+    // ImGui only knows after Begin - hence last frame's, a frame behind while it is resized.
+    private ImGuiWindowFlags Dock()
     {
         if (!Plugin.Config.RetainerPrice.DockToSellList)
             return ImGuiWindowFlags.None;
@@ -88,9 +93,14 @@ internal sealed class RetainerPricePanel
         if (RetainerPriceUpdateTweak.SellListBounds() is not { } bounds)
             return ImGuiWindowFlags.None;
 
-        ImGui.SetNextWindowPos(new Vector2(bounds.X + bounds.Width, bounds.Y), ImGuiCond.Always);
+        var height = _height > 0 ? _height : Math.Min(DefaultHeight, bounds.Height);
+
+        ImGui.SetNextWindowPos(
+            new Vector2(bounds.X + bounds.Width, bounds.Y + bounds.Height - height),
+            ImGuiCond.Always);
+
         ImGui.SetNextWindowSizeConstraints(
-            new Vector2(MinDockedWidth, bounds.Height),
+            new Vector2(MinDockedWidth, MinDockedHeight),
             new Vector2(float.MaxValue, bounds.Height));
 
         return ImGuiWindowFlags.NoMove;

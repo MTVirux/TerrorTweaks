@@ -11,7 +11,7 @@ internal sealed class RetainerPricePanel
     private const float MinDockedWidth = 320f;
     private const float MinDockedHeight = 140f;
     private const float DefaultHeight = 380f;
-    private const float DockOffsetY = 20f;
+    private const float DockOffsetY = 25f;
 
     private static readonly Vector4 Muted = new(0.65f, 0.65f, 0.65f, 1f);
     private static readonly Vector4 Held  = new(1f, 0.8f, 0.35f, 1f);

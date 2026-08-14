@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Components;
 
 namespace TerrorTweaks.Tweaks.RetainerPriceUpdate;
 
@@ -13,6 +15,7 @@ internal sealed class RetainerPricePanel
     private const float DefaultHeight = 380f;
     private const float DockOffsetY = 25f;
     private const float PriceColumnWidth = 80f;
+    private const float ActionColumnWidth = 110f;
     private const float SettingsButtonWidth = 90f;
 
     private static readonly Vector4 Muted   = new(0.65f, 0.65f, 0.65f, 1f);
@@ -153,7 +156,7 @@ internal sealed class RetainerPricePanel
         ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableSetupColumn("Now", ImGuiTableColumnFlags.WidthFixed, PriceColumnWidth);
         ImGui.TableSetupColumn("New", ImGuiTableColumnFlags.WidthFixed, PriceColumnWidth);
-        ImGui.TableSetupColumn("##Update", ImGuiTableColumnFlags.WidthFixed, 70);
+        ImGui.TableSetupColumn("##Update", ImGuiTableColumnFlags.WidthFixed, ActionColumnWidth);
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
 
@@ -202,6 +205,23 @@ internal sealed class RetainerPricePanel
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Check the market board for this item and fill in an undercut price.");
+
+        ImGui.SameLine();
+
+        // Held rather than clicked outright - this pulls real listings off the market, and the
+        // button sits one row away from the one you press repeatedly.
+        var armed = ImGui.GetIO().KeyCtrl;
+        ImGui.BeginDisabled(busy || !armed);
+        if (ImGuiComponents.IconButton($"##remove{id}", FontAwesomeIcon.Trash))
+            _tweak.RemoveListings(row.Target);
+        ImGui.EndDisabled();
+
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+        {
+            ImGui.SetTooltip(armed
+                ? $"Take {(row.Listings == 1 ? "this listing" : $"all {row.Listings} listings")} off the market."
+                : "Hold CTRL to take this off the market.");
+        }
     }
 
     // Carried by the item's colour and its tooltip rather than a line of its own, so a verdict

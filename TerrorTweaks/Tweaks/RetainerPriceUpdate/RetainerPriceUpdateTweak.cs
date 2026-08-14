@@ -64,6 +64,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     {
         Reprice,
         Lookup,
+        Remove,
     }
 
     private enum Step
@@ -76,6 +77,8 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         AwaitListings,
         CloseSearch,
         CancelSell,
+        PickReturn,
+        SettleRemove,
     }
 
     private readonly record struct Job(MarketTarget Target, int Slot, int Price);
@@ -90,6 +93,7 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     private string _runLabel = string.Empty;
     private int _jobIndex;
     private int _updated;
+    private int _matchesBefore;
     private Step _step;
     private long _stepDeadline;
     private long _resumeAt;
@@ -223,6 +227,27 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         Begin(RunMode.Reprice, jobs, ignoreQuality, $"{Listings(jobs.Count)} across {items} item(s)");
     }
 
+    internal void RemoveListings(MarketTarget target)
+    {
+        if (!CanStart())
+            return;
+
+        var ignoreQuality = Plugin.Config.RetainerPrice.IgnoreQuality;
+        var slots = FindSlots(target, ignoreQuality);
+        if (slots.Count == 0)
+        {
+            Services.Chat.PrintError("Retainer Price: this retainer has no listing of that item.");
+            return;
+        }
+
+        var jobs = new List<Job>();
+        foreach (var slot in slots)
+            jobs.Add(new Job(target, slot, 0));
+
+        var name = ItemName(target.ItemId, target.HighQuality && !ignoreQuality);
+        Begin(RunMode.Remove, jobs, ignoreQuality, $"{Listings(jobs.Count)} of {name}");
+    }
+
     internal void RequestPrices(IReadOnlyList<MarketTarget> targets)
     {
         if (!CanStart())
@@ -339,6 +364,12 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             case Step.CancelSell:
                 CancelSell();
                 break;
+            case Step.PickReturn:
+                PickReturn();
+                break;
+            case Step.SettleRemove:
+                SettleRemove();
+                break;
         }
     }
 
@@ -372,7 +403,17 @@ public sealed class RetainerPriceUpdateTweak : Tweak
     private unsafe void OpenMenu()
     {
         var job = Current;
-        if (!SlotMatches(job.Slot, job.Target))
+
+        // Pulling a listing renumbers what sits behind it, so removal re-finds its target every
+        // time rather than trusting an index taken before the run started.
+        var slot = _mode == RunMode.Remove ? FirstSlot(job.Target, _ignoreQuality) : job.Slot;
+        if (slot < 0)
+        {
+            NextJob();
+            return;
+        }
+
+        if (!SlotMatches(slot, job.Target))
         {
             Finish("the listings moved around");
             return;
@@ -391,8 +432,10 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             return;
         }
 
-        context->OpenForItemSlot(InventoryType.RetainerMarket, job.Slot, 0, sellList->Id);
-        BeginStep(Step.PickAdjustPrice);
+        _matchesBefore = FindSlots(job.Target, _ignoreQuality).Count;
+
+        context->OpenForItemSlot(InventoryType.RetainerMarket, slot, 0, sellList->Id);
+        BeginStep(_mode == RunMode.Remove ? Step.PickReturn : Step.PickAdjustPrice);
     }
 
     private unsafe void PickAdjustPrice()
@@ -402,16 +445,61 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             return;
 
         LogMenuEntries(menu);
+        FireMenuEntry(menu, AdjustPriceEntry);
 
+        BeginStep(_mode == RunMode.Reprice ? Step.EnterPrice : Step.ComparePrices);
+    }
+
+    // Adjust Price sits at a known index but the return entry does not - the game puts a
+    // different set on the menu depending on the listing - so this one is found by its label.
+    // Firing a guessed index would pull some other lever on a real listing.
+    private unsafe void PickReturn()
+    {
+        var menu = VisibleAddon(ContextMenuAddonName);
+        if (menu is null || !menu->IsReady)
+            return;
+
+        var entries = MenuEntries(menu);
+        Services.Log.Debug($"Retainer Price: context menu held [{string.Join(" | ", entries)}]");
+
+        var entry = entries.FindIndex(IsReturnEntry);
+        if (entry < 0)
+        {
+            Finish($"nothing on the menu looked like a return entry - it held [{string.Join(" | ", entries)}]");
+            return;
+        }
+
+        FireMenuEntry(menu, entry);
+        BeginStep(Step.SettleRemove);
+    }
+
+    private unsafe void SettleRemove()
+    {
+        if (VisibleAddon(ContextMenuAddonName) is not null)
+            return;
+
+        // The listing is only really gone once the server drops it out of the container, which
+        // is also the only confirmation that the entry did what it was supposed to.
+        if (FindSlots(Current.Target, _ignoreQuality).Count >= _matchesBefore)
+            return;
+
+        _updated++;
+        NextJob();
+    }
+
+    private static bool IsReturnEntry(string entry) =>
+        entry.Contains("Return", StringComparison.OrdinalIgnoreCase)
+        || entry.Contains("Retrieve", StringComparison.OrdinalIgnoreCase);
+
+    private static unsafe void FireMenuEntry(AtkUnitBase* menu, int entry)
+    {
         var values = stackalloc AtkValue[5];
         values[0] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
-        values[1] = new AtkValue { Type = AtkValueType.Int, Int = AdjustPriceEntry };
+        values[1] = new AtkValue { Type = AtkValueType.Int, Int = entry };
         values[2] = new AtkValue { Type = AtkValueType.UInt, UInt = 0 };
         values[3] = new AtkValue { Type = AtkValueType.UInt, UInt = 0 };
         values[4] = new AtkValue { Type = AtkValueType.Null };
         menu->FireCallback(5, values, true);
-
-        BeginStep(_mode == RunMode.Reprice ? Step.EnterPrice : Step.ComparePrices);
     }
 
     private unsafe void EnterPrice()
@@ -593,6 +681,14 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             return;
         }
 
+        if (_mode == RunMode.Remove)
+        {
+            Services.Chat.Print(reason is null
+                ? $"Retainer Price: took {_runLabel} off the market."
+                : $"Retainer Price: stopped after removing {Listings(_updated)} - {reason}.");
+            return;
+        }
+
         Services.Chat.Print(reason is null
             ? $"Retainer Price: updated {_runLabel}."
             : $"Retainer Price: stopped after {Listings(_updated)} - {reason}.");
@@ -697,6 +793,12 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         return slots;
     }
 
+    private static unsafe int FirstSlot(MarketTarget target, bool ignoreQuality)
+    {
+        var slots = FindSlots(target, ignoreQuality);
+        return slots.Count > 0 ? slots[0] : -1;
+    }
+
     private unsafe bool SlotMatches(int slot, MarketTarget target)
     {
         var container = MarketContainer();
@@ -785,12 +887,12 @@ public sealed class RetainerPriceUpdateTweak : Tweak
         Step.ComparePrices => "opening the market board",
         Step.AwaitListings => "waiting for market prices",
         Step.CloseSearch => "closing the market board",
+        Step.PickReturn => "picking the return entry",
+        Step.SettleRemove => "waiting for the listing to come off",
         _ => "closing the price window",
     };
 
-    // The adjust-price entry is assumed to be first; logging what the menu actually held makes
-    // a wrong pick obvious in the log instead of silent.
-    private static unsafe void LogMenuEntries(AtkUnitBase* menu)
+    private static unsafe List<string> MenuEntries(AtkUnitBase* menu)
     {
         var entries = new List<string>();
         for (var i = 0; i < menu->AtkValuesCount; i++)
@@ -805,8 +907,13 @@ public sealed class RetainerPriceUpdateTweak : Tweak
             entries.Add(MemoryHelper.ReadSeStringNullTerminated((nint)value.String.Value).TextValue);
         }
 
-        Services.Log.Debug($"Retainer Price: context menu held [{string.Join(" | ", entries)}]");
+        return entries;
     }
+
+    // The adjust-price entry is assumed to be first; logging what the menu actually held makes
+    // a wrong pick obvious in the log instead of silent.
+    private static unsafe void LogMenuEntries(AtkUnitBase* menu) =>
+        Services.Log.Debug($"Retainer Price: context menu held [{string.Join(" | ", MenuEntries(menu))}]");
 
     public override void DrawConfig()
     {

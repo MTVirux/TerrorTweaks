@@ -376,7 +376,7 @@ internal sealed class ListingHelperPanel
             if (ImGui.IsItemHovered())
             {
                 ImGui.SetTooltip(refreshAll
-                    ? $"Every item is stored already. Checks them all again.\nEstimated Time: {Estimate(rows, true)}"
+                    ? $"Every item is stored already. \nChecks them all again.\nEstimated Time: {Estimate(rows, true)}"
                     : $"Checks every item not looked up yet.\nEstimated Time: {Estimate(rows, false)}");
             }
 

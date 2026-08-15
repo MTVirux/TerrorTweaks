@@ -232,7 +232,8 @@ internal sealed class ListingHelperPanel
 
         // Green marks an item this session already holds listings for - the button throws them
         // away and asks again, so it is worth seeing which ones there is something to throw.
-        var cached = _tweak.Cached(row.Target);
+        var age = _tweak.CachedAgeMs(row.Target);
+        var cached = age is not null;
         PushGreen(cached);
 
         ImGui.BeginDisabled(busy);
@@ -244,8 +245,8 @@ internal sealed class ListingHelperPanel
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(cached
-                ? "Price already refreshed. Checks it again."
+            ImGui.SetTooltip(age is { } since
+                ? $"Update price from MB\nLast checked {Ago(since)} ago."
                 : "Update price from MB");
         }
 
@@ -289,6 +290,12 @@ internal sealed class ListingHelperPanel
         return toRetainer
             ? $"Take {what} off the market and into the retainer's inventory."
             : $"Take {what} off the market and into your inventory. Hold SHIFT as well for the retainer's.";
+    }
+
+    private static string Ago(long ms)
+    {
+        var seconds = (int)(ms / 1000);
+        return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
     }
 
     private int Wanted(PanelRow row) =>

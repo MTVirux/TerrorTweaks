@@ -1147,6 +1147,9 @@ public sealed class ListingHelperTweak : Tweak
 
     internal bool Cached(MarketTarget target) => Fresh(target) is not null;
 
+    internal long? CachedAgeMs(MarketTarget target) =>
+        Fresh(target) is not null ? Environment.TickCount64 - _cache[target].RecordedAt : null;
+
     // Dropped on the way past rather than on a timer, which is enough - the panel asks about
     // every row it draws, so a stale entry never outlives the frame it is noticed on.
     private List<MarketListing>? Fresh(MarketTarget target)

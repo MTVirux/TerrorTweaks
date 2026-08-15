@@ -243,7 +243,11 @@ internal sealed class ListingHelperPanel
         PopGreen(cached);
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Update price from MB");
+        {
+            ImGui.SetTooltip(cached
+                ? "Price already refreshed. Checks it again."
+                : "Update price from MB");
+        }
 
         ImGui.SameLine();
 

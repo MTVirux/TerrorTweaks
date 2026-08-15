@@ -45,8 +45,13 @@ public sealed class ListingHelperTweak : Tweak
     private const string InputNumericAddonName = "InputNumeric";
 
     // The game builds "Adjust Price" as the first entry of a market slot's context menu, and
-    // Dalamud appends plugin entries after the native ones, so this index stays put.
+    // Dalamud appends plugin entries after the native ones, so this index stays put. An index
+    // rather than a label, so it needs nothing from the client's language.
     private const int AdjustPriceEntry = 0;
+
+    // Addon sheet row for the inventory menu's "Put Up for Sale" entry, looked up rather than
+    // written out because the menu is drawn in the client's language.
+    private const uint PutUpForSaleRow = 99;
 
     // The sell window's Compare Prices button answers on this callback value. Confirming a
     // price rides the same callback with a different one, so a wrong value here reprices a
@@ -893,7 +898,20 @@ public sealed class ListingHelperTweak : Tweak
     }
 
     private static bool IsSellEntry(string entry) =>
-        entry.Contains("Put Up for Sale", StringComparison.OrdinalIgnoreCase);
+        entry.Contains(PutUpForSaleLabel(), StringComparison.OrdinalIgnoreCase);
+
+    // The entry's own label out of the Addon sheet, which Dalamud serves in whatever language the
+    // client is running, so a German or Japanese menu matches as well as an English one. Row 99 is
+    // the inventory menu's sale entry - the same row AutoRetainer reads for it.
+    private static string PutUpForSaleLabel()
+    {
+        var sheet = Services.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>();
+        if (sheet.TryGetRow(PutUpForSaleRow, out var row) && row.Text.ExtractText() is { Length: > 0 } label)
+            return label;
+
+        // An empty needle would match the first entry on the menu, whatever it happens to be.
+        return "Put Up for Sale";
+    }
 
     private static unsafe void FireMenuEntry(AtkUnitBase* menu, int entry)
     {

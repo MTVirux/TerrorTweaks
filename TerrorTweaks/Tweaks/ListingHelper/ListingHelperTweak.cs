@@ -68,6 +68,10 @@ public sealed class ListingHelperTweak : Tweak
     // The market container is twenty slots, so the window can never draw more rows than that.
     private const int MaxListings = 20;
 
+    // How long a stored answer stands for. The market moves under it, and an undercut worked out
+    // from a page this old is a guess rather than a price.
+    private const int CacheLifetimeMs = 180_000;
+
     // The game's own HQ symbol. Dalamud merges the game symbol font into its default one, so
     // this renders in the panel as well as in chat.
     private const char HighQualityGlyph = (char)SeIconChar.HighQuality;
@@ -106,7 +110,9 @@ public sealed class ListingHelperTweak : Tweak
         public int Quantity { get; init; }
     }
 
-    private readonly Dictionary<MarketTarget, List<MarketListing>> _cache = [];
+    private readonly record struct CachedListings(List<MarketListing> Listings, long RecordedAt);
+
+    private readonly Dictionary<MarketTarget, CachedListings> _cache = [];
     private readonly HashSet<ulong> _ownRetainers = [];
     private readonly MarketLookup _lookup = new();
     private readonly List<Job> _jobs = [];
@@ -848,16 +854,32 @@ public sealed class ListingHelperTweak : Tweak
 
     private void RecordListings(MarketTarget target, IReadOnlyList<MarketListing> listings)
     {
-        _cache[target] = [.. listings];
+        _cache[target] = new CachedListings([.. listings], Environment.TickCount64);
         if (Price(target) is { } result)
             _panel.SetPrice(target, result);
     }
 
-    internal bool Cached(MarketTarget target) => _cache.ContainsKey(target);
+    internal bool Cached(MarketTarget target) => Fresh(target) is not null;
+
+    // Dropped on the way past rather than on a timer, which is enough - the panel asks about
+    // every row it draws, so a stale entry never outlives the frame it is noticed on.
+    private List<MarketListing>? Fresh(MarketTarget target)
+    {
+        if (!_cache.TryGetValue(target, out var entry))
+            return null;
+
+        if (Environment.TickCount64 - entry.RecordedAt > CacheLifetimeMs)
+        {
+            _cache.Remove(target);
+            return null;
+        }
+
+        return entry.Listings;
+    }
 
     private UndercutResult? Price(MarketTarget target)
     {
-        if (!_cache.TryGetValue(target, out var listings))
+        if (Fresh(target) is not { } listings)
             return null;
 
         var cfg = Plugin.Config.ListingHelper;

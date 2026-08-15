@@ -207,20 +207,14 @@ internal sealed class ListingHelperPanel
         // Green marks an item this session already holds listings for - the button throws them
         // away and asks again, so it is worth seeing which ones there is something to throw.
         var cached = _tweak.Cached(row.Target);
-        if (cached)
-        {
-            ImGui.PushStyleColor(ImGuiCol.Button, Green);
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, GreenHovered);
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, GreenActive);
-        }
+        PushGreen(cached);
 
         ImGui.BeginDisabled(busy);
         if (ImGuiComponents.IconButton($"##update{id}", FontAwesomeIcon.SyncAlt))
             _tweak.RequestPrices([row.Target]);
         ImGui.EndDisabled();
 
-        if (cached)
-            ImGui.PopStyleColor(3);
+        PopGreen(cached);
 
         if (ImGui.IsItemHovered())
         {
@@ -260,6 +254,27 @@ internal sealed class ListingHelperPanel
     private int Wanted(PanelRow row) =>
         _inputs.TryGetValue(row.Target, out var stored) ? stored : row.CurrentPrice;
 
+    // Anything already stored is left alone, so a run only fills in the gaps - until there are
+    // none left, when the caller asks for the lot instead.
+    private IEnumerable<MarketTarget> Pending(List<PanelRow> rows, bool all) =>
+        rows.Where(row => all || !_tweak.Cached(row.Target)).Select(row => row.Target);
+
+    private static void PushGreen(bool green)
+    {
+        if (!green)
+            return;
+
+        ImGui.PushStyleColor(ImGuiCol.Button, Green);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, GreenHovered);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, GreenActive);
+    }
+
+    private static void PopGreen(bool green)
+    {
+        if (green)
+            ImGui.PopStyleColor(3);
+    }
+
     // Carried by the item's colour and its tooltip rather than a line of its own, so a verdict
     // never changes the height of a row.
     private static Vector4? OutcomeColour(UndercutOutcome? outcome) => outcome switch
@@ -296,11 +311,22 @@ internal sealed class ListingHelperPanel
         {
             ImGui.BeginDisabled(rows.Count == 0);
 
+            // With nothing left to fill in, the button turns into a full refresh - and goes
+            // green to say so, rather than looking like it has stopped doing anything.
+            var refreshAll = rows.Count > 0 && rows.All(row => _tweak.Cached(row.Target));
+            PushGreen(refreshAll);
+
             if (ImGui.Button("Update All##ListingHelperPanel", new Vector2(110, 0)))
-                _tweak.RequestPrices([.. rows.Select(row => row.Target)]);
+                _tweak.RequestPrices([.. Pending(rows, refreshAll)]);
+
+            PopGreen(refreshAll);
 
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Checks the market board for every item, about {Estimate(rows)} at the current delay.");
+            {
+                ImGui.SetTooltip(refreshAll
+                    ? $"Every item is stored already. Checks them all again, about {Estimate(rows, true)} at the current delay."
+                    : $"Checks every item not looked up yet, about {Estimate(rows, false)} at the current delay.");
+            }
 
             ImGui.SameLine();
             if (ImGui.Button("Apply All##ListingHelperPanel", new Vector2(110, 0)))
@@ -327,11 +353,11 @@ internal sealed class ListingHelperPanel
             ImGui.SetTooltip("Open the TerrorTweaks settings window.");
     }
 
-    // Every row is checked again, so nothing is skipped for having been looked up before. Each
-    // one pays the configured delay plus the sell window and the server round trip.
-    private static string Estimate(List<PanelRow> rows)
+    // Each lookup pays the configured delay plus the sell window and the server round trip.
+    private string Estimate(List<PanelRow> rows, bool all)
     {
-        var seconds = (int)Math.Ceiling(rows.Count * (Plugin.Config.ListingHelper.LookupDelayMs + 4000) / 1000.0);
+        var pending = Pending(rows, all).Count();
+        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.ListingHelper.LookupDelayMs + 4000) / 1000.0);
         return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
     }
 }

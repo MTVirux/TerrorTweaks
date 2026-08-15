@@ -262,13 +262,6 @@ internal sealed class ListingHelperPanel
 
         PopGreen(applied);
 
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip(applied
-                ? "This item's listings are already at the value in its box."
-                : "Reprice this item's listings to the value in its box.");
-        }
-
         ImGui.SameLine();
 
         // Held rather than clicked outright - this pulls real listings off the market, and the

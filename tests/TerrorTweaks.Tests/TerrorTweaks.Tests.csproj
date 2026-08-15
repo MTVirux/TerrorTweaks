@@ -27,6 +27,7 @@
     <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\UndercutCalculator.cs" Link="UndercutCalculator.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\MarketListingAccumulator.cs" Link="MarketListingAccumulator.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\DuplicatePlan.cs" Link="DuplicatePlan.cs" />
+    <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\StackMergePlan.cs" Link="StackMergePlan.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\UniversalisFallback.cs" Link="UniversalisFallback.cs" />
   </ItemGroup>
 

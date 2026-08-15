@@ -106,6 +106,36 @@ internal static unsafe class DuplicateSource
         return null;
     }
 
+    // Dragging a stack onto another of the same item is how the game pours them together, and
+    // this is the call behind that drag. Both slots are on the same side of the sale, so it never
+    // crosses between the player and the retainer - the move that would raise a quantity dialog.
+    internal static void Merge(SourceSlot from, SourceSlot to)
+    {
+        var manager = InventoryManager.Instance();
+        if (manager is null)
+            return;
+
+        var moved = manager->MoveItemSlot(from.Container, (ushort)from.Slot, to.Container, (ushort)to.Slot, true);
+        Services.Log.Debug(
+            $"Listing Helper: merged {from.Container}[{from.Slot}] into {to.Container}[{to.Slot}], got {moved}.");
+    }
+
+    internal static int QuantityAt(SourceSlot slot)
+    {
+        var manager = InventoryManager.Instance();
+        var container = manager is null ? null : manager->GetInventoryContainer(slot.Container);
+        if (container is null || !container->IsLoaded || slot.Slot < 0 || slot.Slot >= container->Size)
+            return 0;
+
+        var item = container->GetInventorySlot(slot.Slot);
+        return item is null ? 0 : item->Quantity;
+    }
+
+    internal static int MaxStackSize(uint itemId) =>
+        Services.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().TryGetRow(itemId, out var row)
+            ? (int)Math.Clamp(row.StackSize, 0, int.MaxValue)
+            : 0;
+
     // Quality is never ignored here: a duplicate that swapped an HQ listing for an NQ stack
     // would put up an offer nobody asked for.
     private static bool Matches(InventoryItem* item, MarketTarget target) =>

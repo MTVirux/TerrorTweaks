@@ -42,6 +42,7 @@ public sealed class ListingHelperTweak : Tweak
     private const string SellAddonName = "RetainerSell";
     private const string SearchResultAddonName = "ItemSearchResult";
     private const string ContextMenuAddonName = "ContextMenu";
+    private const string InputNumericAddonName = "InputNumeric";
 
     // The game builds "Adjust Price" as the first entry of a market slot's context menu, and
     // Dalamud appends plugin entries after the native ones, so this index stays put.
@@ -104,6 +105,7 @@ public sealed class ListingHelperTweak : Tweak
         PickPutUpForSale,
         EnterListing,
         SettleDuplicate,
+        SettleMerge,
     }
 
     private readonly record struct Job(MarketTarget Target, int Slot, int Price)
@@ -145,6 +147,11 @@ public sealed class ListingHelperTweak : Tweak
     private int _updated;
     private int _matchesBefore;
     private int _listedBefore;
+
+    // The slot a merge is pouring into, and what it held before - the only way to tell the move
+    // landed, since the game reports nothing when it does not.
+    private SourceSlot _mergeTarget;
+    private int _mergeBefore;
     private Step _step;
     private long _stepDeadline;
     private long _resumeAt;
@@ -333,7 +340,12 @@ public sealed class ListingHelperTweak : Tweak
         foreach (var source in sources)
             stacks.Add(source.Quantity);
 
-        var plan = DuplicatePlan.Build(stacks, listing.Quantity, OccupiedMarketSlots(), wanted);
+        var plan = DuplicatePlan.Build(
+            stacks,
+            listing.Quantity,
+            OccupiedMarketSlots(),
+            wanted,
+            Plugin.Config.ListingHelper.MergeSplitStacks);
 
         if (plan.Block == DuplicateBlock.MarketFull)
         {
@@ -562,6 +574,9 @@ public sealed class ListingHelperTweak : Tweak
             case Step.SettleDuplicate:
                 SettleDuplicate();
                 break;
+            case Step.SettleMerge:
+                SettleMerge();
+                break;
         }
     }
 
@@ -589,6 +604,12 @@ public sealed class ListingHelperTweak : Tweak
             case Step.SettleDuplicate:
                 CloseStrandedSell();
                 Finish($"the game stopped responding while it was {StepDescription(_step)}");
+                break;
+            case Step.SettleMerge:
+                // A move the game answered with its quantity dialog would sit there unanswered,
+                // and a modal left open blocks everything behind it.
+                ForceClose(InputNumericAddonName);
+                Finish("the split stacks would not merge");
                 break;
             default:
                 Finish($"the game stopped responding while it was {StepDescription(_step)}");
@@ -711,7 +732,9 @@ public sealed class ListingHelperTweak : Tweak
         // the source is found again for every copy rather than trusted from before the run.
         if (DuplicateSource.FirstHolding(job.Target, job.Side, job.Quantity) is not { } source)
         {
-            Finish($"{DuplicateSource.Describe(job.Side)} ran out of that item");
+            if (!StartMerge(job))
+                Finish($"{DuplicateSource.Describe(job.Side)} ran out of that item");
+
             return;
         }
 
@@ -732,6 +755,43 @@ public sealed class ListingHelperTweak : Tweak
 
         context->OpenForItemSlot(source.Container, source.Slot, 0, DuplicateSource.OwnerAddonId(job.Side));
         BeginStep(Step.PickPutUpForSale);
+    }
+
+    // A copy comes out of one bag slot, so stock split across several is poured together first -
+    // three partial stacks that add up would be three refusals otherwise. One pair per pass: the
+    // slots are read again from the game between moves rather than planned out in advance.
+    private bool StartMerge(Job job)
+    {
+        if (!Plugin.Config.ListingHelper.MergeSplitStacks)
+            return false;
+
+        var slots = DuplicateSource.Find(job.Target, job.Side);
+        var stacks = new List<int>(slots.Count);
+        foreach (var slot in slots)
+            stacks.Add(slot.Quantity);
+
+        var cap = DuplicateSource.MaxStackSize(job.Target.ItemId);
+        if (StackMergePlan.Next(stacks, job.Quantity, cap) is not { } merge)
+            return false;
+
+        _mergeTarget = slots[merge.To];
+        _mergeBefore = _mergeTarget.Quantity;
+        DuplicateSource.Merge(slots[merge.From], _mergeTarget);
+
+        BeginStep(Step.SettleMerge);
+        return true;
+    }
+
+    private void SettleMerge()
+    {
+        // The items have only really moved once the destination holds more than it did, which is
+        // also the only confirmation the move was accepted.
+        if (DuplicateSource.QuantityAt(_mergeTarget) <= _mergeBefore)
+            return;
+
+        // Back round the same step: one merge may not be enough, and the next pass picks the next
+        // pair off freshly read slots.
+        BeginStep(Step.OpenMenu);
     }
 
     // A bag item's menu holds a different set depending on where the player is standing, so the
@@ -1447,6 +1507,7 @@ public sealed class ListingHelperTweak : Tweak
         Step.PickPutUpForSale => "picking Put Up for Sale",
         Step.EnterListing => "waiting for the sell window",
         Step.SettleDuplicate => "waiting for the copy to go up",
+        Step.SettleMerge => "merging the split stacks",
         _ => "closing the price window",
     };
 
@@ -1536,6 +1597,20 @@ public sealed class ListingHelperTweak : Tweak
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Treat both qualities of an item as one thing to price, instead of keeping them apart.");
+
+        var mergeStacks = cfg.MergeSplitStacks;
+        if (ImGui.Checkbox("Merge split stacks##ListingHelper", ref mergeStacks))
+        {
+            cfg.MergeSplitStacks = mergeStacks;
+            Plugin.Config.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "A copy goes up out of one bag slot, so partial stacks spread over several are\n"
+                + "poured together first. Off, a duplicate is refused instead of moving anything.");
+        }
 
         var undercut = cfg.UndercutGil;
         ImGui.SetNextItemWidth(160);

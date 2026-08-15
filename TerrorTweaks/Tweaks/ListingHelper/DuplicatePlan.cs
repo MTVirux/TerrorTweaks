@@ -21,7 +21,12 @@ internal static class DuplicatePlan
     // land in.
     public const int MarketSlots = 20;
 
-    public static DuplicationPlan Build(IReadOnlyList<int> sourceStacks, int stackSize, int occupiedSlots, int wanted)
+    public static DuplicationPlan Build(
+        IReadOnlyList<int> sourceStacks,
+        int stackSize,
+        int occupiedSlots,
+        int wanted,
+        bool canMerge)
     {
         if (occupiedSlots >= MarketSlots)
             return new DuplicationPlan(0, DuplicateBlock.MarketFull);
@@ -29,11 +34,23 @@ internal static class DuplicatePlan
         if (stackSize <= 0)
             return new DuplicationPlan(0, DuplicateBlock.NotEnoughStock);
 
-        // A copy is put up out of one bag slot, so partial stacks spread over several never add
-        // up to one - and a short copy would offer something other than what it duplicated.
+        // A copy is put up out of one bag slot, so partial stacks spread over several only count
+        // towards one if they can be poured together first - and a short copy would offer
+        // something other than what it duplicated.
         var whole = 0;
-        foreach (var stack in sourceStacks)
-            whole += stack / stackSize;
+        if (canMerge)
+        {
+            var total = 0;
+            foreach (var stack in sourceStacks)
+                total += stack;
+
+            whole = total / stackSize;
+        }
+        else
+        {
+            foreach (var stack in sourceStacks)
+                whole += stack / stackSize;
+        }
 
         if (whole == 0)
             return new DuplicationPlan(0, DuplicateBlock.NotEnoughStock);

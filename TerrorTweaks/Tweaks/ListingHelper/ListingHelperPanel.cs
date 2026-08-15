@@ -17,6 +17,7 @@ internal sealed class ListingHelperPanel
     private const float PriceColumnWidth = 80f;
     private const float ActionColumnWidth = 120f;
     private const float SettingsButtonWidth = 90f;
+    private const int LookupOverheadMs = 500;
 
     private static readonly Vector4 Muted   = new(0.65f, 0.65f, 0.65f, 1f);
     private static readonly Vector4 Warning = new(1f, 0.8f, 0.35f, 1f);
@@ -405,11 +406,12 @@ internal sealed class ListingHelperPanel
             ImGui.SetTooltip("Open the TerrorTweaks settings window.");
     }
 
-    // Each lookup pays the configured delay plus the sell window and the server round trip.
+    // One lookup per item however many listings sit behind it, each paying the configured delay
+    // plus a flat allowance for the sell window and the server round trip.
     private string Estimate(List<PanelRow> rows, bool all)
     {
         var pending = Pending(rows, all).Count();
-        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.ListingHelper.LookupDelayMs + 4000) / 1000.0);
+        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.ListingHelper.LookupDelayMs + LookupOverheadMs) / 1000.0);
         return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
     }
 }

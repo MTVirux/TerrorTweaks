@@ -284,7 +284,7 @@ internal sealed class ListingHelperPanel
     private static string RemoveTooltip(PanelRow row, bool armed, bool toRetainer)
     {
         if (!armed)
-            return "Hold CTRL to take this off the market, or CTRL+SHIFT to send it to the retainer.";
+            return "Hold CTRL to take this off the market.\nOr CTRL+SHIFT to send it to the retainer.";
 
         var what = row.Listings == 1 ? "this listing" : $"all {row.Listings} listings";
         return toRetainer

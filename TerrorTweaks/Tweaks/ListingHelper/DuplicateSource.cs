@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -43,6 +44,16 @@ internal static unsafe class DuplicateSource
     private static readonly string[] PlayerAddons = ["InventoryLarge", "InventoryExpansion", "Inventory"];
 
     internal static BagSide Side() => VisibleAddon(RetainerAddons) is null ? BagSide.Player : BagSide.Retainer;
+
+    // Which side a container belongs to, and null for anything that is not a bag at all - both
+    // windows can be up at once, so the container is a surer answer than which one is on screen.
+    internal static BagSide? SideOf(InventoryType type)
+    {
+        if (Array.IndexOf(PlayerBags, type) >= 0)
+            return BagSide.Player;
+
+        return Array.IndexOf(RetainerBags, type) >= 0 ? BagSide.Retainer : null;
+    }
 
     internal static string Describe(BagSide side) =>
         side == BagSide.Retainer ? "the retainer's inventory" : "your inventory";

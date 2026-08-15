@@ -23,6 +23,9 @@ internal readonly record struct AddonBounds(float X, float Y, float Width, float
 // One market listing as it stands right now - what a duplicate of it has to look like.
 internal readonly record struct ListingSource(MarketTarget Target, int Price, int Quantity);
 
+// One stack sitting in a bag, waiting to be put up.
+internal readonly record struct StockSource(MarketTarget Target, int Quantity, BagSide Side);
+
 internal readonly record struct PanelRow(
     MarketTarget Target,
     string Name,
@@ -82,6 +85,7 @@ public sealed class ListingHelperTweak : Tweak
         Lookup,
         Remove,
         Duplicate,
+        ListUndercut,
     }
 
     private enum Step
@@ -144,7 +148,8 @@ public sealed class ListingHelperTweak : Tweak
     public override string Description =>
         "Adds a panel to the retainer sell list for undercutting the market board price of " +
         "everything the retainer has listed, plus \"Duplicate Listing\" and \"Recursive " +
-        "Duplicate\" entries that put up more copies of a listing from the same stock.";
+        "Duplicate\" entries that put up more copies of a listing from the same stock, and a " +
+        "\"List Undercut\" entry that puts a stack up at the price the market board says.";
 
     public override void Enable()
     {
@@ -168,11 +173,91 @@ public sealed class ListingHelperTweak : Tweak
 
     private void OnMenuOpened(IMenuOpenedArgs args)
     {
-        if (ResolveListing(args) is not { } listing)
+        if (ResolveListing(args) is { } listing)
+        {
+            args.AddMenuItem(MenuPrefix.Item("Duplicate Listing", _ => Duplicate(listing, 1)));
+            args.AddMenuItem(MenuPrefix.Item("Recursive Duplicate", _ => Duplicate(listing, DuplicatePlan.MarketSlots)));
+            return;
+        }
+
+        if (ResolveStock(args) is { } stock)
+            args.AddMenuItem(MenuPrefix.Item("List Undercut", _ => ListUndercut(stock)));
+    }
+
+    // The bag side of the same menu: an item sitting in a bag with the sell list up is one the
+    // game itself would offer to put on the market, so that is where this is offered too.
+    private static unsafe StockSource? ResolveStock(IMenuOpenedArgs args)
+    {
+        if (!SellListOpen() || args.Target is not MenuTargetInventory inventory)
+            return null;
+
+        if (inventory.TargetItem is not { } item)
+            return null;
+
+        if (DuplicateSource.SideOf((InventoryType)item.ContainerType) is not { } side)
+            return null;
+
+        var read = ReadBagItem((InventoryType)item.ContainerType, (int)item.InventorySlot, side);
+        return read is { } stock && Marketable(stock.Target.ItemId) ? stock : null;
+    }
+
+    private static unsafe StockSource? ReadBagItem(InventoryType type, int slot, BagSide side)
+    {
+        var manager = InventoryManager.Instance();
+        if (manager is null)
+            return null;
+
+        var container = manager->GetInventoryContainer(type);
+        if (container is null || !container->IsLoaded || slot < 0 || slot >= container->Size)
+            return null;
+
+        var item = container->GetInventorySlot(slot);
+        if (item is null || item->ItemId == 0)
+            return null;
+
+        var target = new MarketTarget(
+            ItemIdNormalizer.ToBaseItemId(item->ItemId),
+            item->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality));
+
+        return new StockSource(target, item->Quantity, side);
+    }
+
+    // Anything the market board will not carry has no price to undercut, and the game offers no
+    // way to list it either. Unmarketable items sit in search category zero.
+    private static bool Marketable(uint itemId) =>
+        Services.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().TryGetRow(itemId, out var row)
+        && row.ItemSearchCategory.RowId != 0;
+
+    private void ListUndercut(StockSource stock)
+    {
+        if (!CanStart())
             return;
 
-        args.AddMenuItem(MenuPrefix.Item("Duplicate Listing", _ => Duplicate(listing, 1)));
-        args.AddMenuItem(MenuPrefix.Item("Recursive Duplicate", _ => Duplicate(listing, DuplicatePlan.MarketSlots)));
+        if (OccupiedMarketSlots() >= DuplicatePlan.MarketSlots)
+        {
+            Services.Chat.PrintError("Listing Helper: this retainer has no market slot left to list into.");
+            return;
+        }
+
+        if (DuplicateSource.FirstHolding(stock.Target, stock.Side, stock.Quantity) is null)
+        {
+            Services.Chat.PrintError(
+                $"Listing Helper: {DuplicateSource.Describe(stock.Side)} no longer holds that stack.");
+            return;
+        }
+
+        // The price is not known yet - it comes off the market board partway through the run.
+        var jobs = new List<Job>
+        {
+            new(stock.Target, 0, 0) { Side = stock.Side, Quantity = stock.Quantity },
+        };
+
+        var name = ItemName(stock.Target.ItemId, stock.Target.HighQuality);
+        Begin(
+            RunMode.ListUndercut,
+            jobs,
+            Plugin.Config.ListingHelper.IgnoreQuality,
+            $"{stock.Quantity}x {name}");
     }
 
     private static unsafe ListingSource? ResolveListing(IMenuOpenedArgs args)
@@ -382,6 +467,7 @@ public sealed class ListingHelperTweak : Tweak
             RunMode.Reprice => $"Listing Helper: setting {label}.",
             RunMode.Remove => $"Listing Helper: taking {label} off the market.",
             RunMode.Duplicate => $"Listing Helper: putting up {label}.",
+            RunMode.ListUndercut => $"Listing Helper: checking the market before listing {label}.",
             _ => $"Listing Helper: checking market prices for {label}.",
         });
     }
@@ -472,12 +558,13 @@ public sealed class ListingHelperTweak : Tweak
             case Step.CloseSearch:
                 ForceClose(SearchResultAddonName);
                 _cancelFired = false;
-                BeginStep(Step.CancelSell);
+                BeginStep(AfterSearch());
                 break;
             case Step.CancelSell:
                 ForceClose(SellAddonName);
                 NextJob();
                 break;
+            case Step.ComparePrices:
             case Step.EnterListing:
             case Step.SettleDuplicate:
                 CloseStrandedSell();
@@ -493,7 +580,7 @@ public sealed class ListingHelperTweak : Tweak
 
     private unsafe void OpenMenu()
     {
-        if (_mode == RunMode.Duplicate)
+        if (_mode is RunMode.Duplicate or RunMode.ListUndercut)
         {
             OpenSourceMenu();
             return;
@@ -634,13 +721,20 @@ public sealed class ListingHelperTweak : Tweak
         }
 
         FireMenuEntry(menu, entry);
-        BeginStep(Step.EnterListing);
+
+        // A duplicate already knows its price, and so does an undercut whose item was looked up
+        // recently enough - only the rest has to go out to the market board first.
+        var priced = _mode == RunMode.Duplicate || Cached(Current.Target);
+        BeginStep(priced ? Step.EnterListing : Step.ComparePrices);
     }
 
     private unsafe void EnterListing()
     {
         var sell = SellAddon();
         if (sell is null || sell->AskingPrice is null || sell->Quantity is null)
+            return;
+
+        if (_mode == RunMode.ListUndercut && !TakeUndercutPrice())
             return;
 
         var job = Current;
@@ -658,6 +752,23 @@ public sealed class ListingHelperTweak : Tweak
         sell->AtkUnitBase.FireCallback(2, values, true);
 
         BeginStep(Step.SettleDuplicate);
+    }
+
+    // An item nobody is selling has no price to cut under, and neither has one whose lookup never
+    // answered - a guessed number would go up as a real offer, so the run stops instead.
+    private bool TakeUndercutPrice()
+    {
+        var job = Current;
+        if (Price(job.Target) is not { Outcome: not UndercutOutcome.NoListings } result)
+        {
+            CloseStrandedSell();
+            Finish("nothing came back off the market board to undercut");
+            return false;
+        }
+
+        _jobs[_jobIndex] = job with { Price = result.Price };
+        _runLabel = $"{_runLabel} at {result.Price:N0} gil";
+        return true;
     }
 
     private unsafe void SettleDuplicate()
@@ -799,13 +910,17 @@ public sealed class ListingHelperTweak : Tweak
         RecordListings(target, _lookup.Listings);
     }
 
+    // A lookup leaves the sell window by cancelling it. An undercut has to keep it: that window
+    // is where the listing itself goes up.
+    private Step AfterSearch() => _mode == RunMode.ListUndercut ? Step.EnterListing : Step.CancelSell;
+
     private unsafe void CloseSearch()
     {
         var search = VisibleAddon(SearchResultAddonName);
         if (search is null)
         {
             _cancelFired = false;
-            BeginStep(Step.CancelSell);
+            BeginStep(AfterSearch());
             return;
         }
 
@@ -935,6 +1050,14 @@ public sealed class ListingHelperTweak : Tweak
             Services.Chat.Print(reason is null
                 ? $"Listing Helper: put up {_runLabel}."
                 : $"Listing Helper: stopped after putting up {Listings(_updated)} - {reason}.");
+            return;
+        }
+
+        if (_mode == RunMode.ListUndercut)
+        {
+            Services.Chat.Print(reason is null
+                ? $"Listing Helper: listed {_runLabel}."
+                : $"Listing Helper: did not list {_runLabel} - {reason}.");
             return;
         }
 

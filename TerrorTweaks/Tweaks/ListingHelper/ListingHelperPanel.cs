@@ -289,6 +289,9 @@ internal sealed class ListingHelperPanel
     private int Wanted(PanelRow row) =>
         _inputs.TryGetValue(row.Target, out var stored) ? stored : row.CurrentPrice;
 
+    // Listings sitting at different prices are never all at the box price, whatever it reads.
+    private bool Matches(PanelRow row) => !row.MixedPrices && row.CurrentPrice == Wanted(row);
+
     // Anything already stored is left alone, so a run only fills in the gaps - until there are
     // none left, when the caller asks for the lot instead.
     private IEnumerable<MarketTarget> Pending(List<PanelRow> rows, bool all) =>
@@ -366,11 +369,23 @@ internal sealed class ListingHelperPanel
             }
 
             ImGui.SameLine();
+
+            // Green once every listing already sits at the number in its box, so a finished
+            // pass is visible without pressing the button to find out there is nothing to do.
+            var applied = rows.Count > 0 && rows.All(Matches);
+            PushGreen(applied);
+
             if (ImGui.Button("Apply All##ListingHelperPanel", new Vector2(110, 0)))
                 _tweak.ApplyAll(_inputs);
 
+            PopGreen(applied);
+
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Reprices every listing to the value in its box, skipping ones already at it.");
+            {
+                ImGui.SetTooltip(applied
+                    ? "Every listing is already at the value in its box."
+                    : "Reprices every listing to the value in its box, skipping ones already at it.");
+            }
 
             ImGui.EndDisabled();
         }

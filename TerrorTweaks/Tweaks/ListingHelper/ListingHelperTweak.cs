@@ -9,6 +9,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.UI.Info;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using TerrorTweaks.Framework;
 using TerrorTweaks.Util;
@@ -742,11 +743,32 @@ public sealed class ListingHelperTweak : Tweak
         var quiet = _lookup.Listings.Count > 0
             && Environment.TickCount64 - _lookup.LastPageAt > PageQuietMs;
 
-        if (!_lookup.Complete && !quiet)
+        if (!_lookup.Complete && !quiet && !NothingListed())
             return;
 
         FinishLookup(false);
         BeginStep(Step.CloseSearch);
+    }
+
+    // An item nobody is selling sends no offerings packet at all, so waiting for one is waiting
+    // for something that is never coming. The history landing says the server answered, and the
+    // search the client is holding says what it answered with.
+    private unsafe bool NothingListed()
+    {
+        if (!_lookup.Answered || _lookup.Listings.Count > 0)
+            return false;
+
+        var search = InfoProxyItemSearch.Instance();
+        if (search is null
+            || search->WaitingForListings
+            || search->ListingCount != 0
+            || ItemIdNormalizer.ToBaseItemId(search->SearchItemId) != Current.Target.ItemId)
+        {
+            return false;
+        }
+
+        Services.Log.Debug($"Listing Helper: item {Current.Target.ItemId} came back with nothing listed.");
+        return true;
     }
 
     private void FinishLookup(bool timedOut)

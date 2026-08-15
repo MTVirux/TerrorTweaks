@@ -12,6 +12,7 @@ internal sealed class MarketLookup
     private uint _itemId;
     private long _lastPageAt;
     private bool _listening;
+    private bool _answered;
 
     internal bool Complete => _accumulator.Complete;
 
@@ -19,16 +20,22 @@ internal sealed class MarketLookup
 
     internal long LastPageAt => _lastPageAt;
 
+    // The server has said something about this item. Not the same as having the offers: the
+    // sales history lands first and the offers stream in behind it.
+    internal bool Answered => _answered;
+
     internal void Begin(uint baseItemId)
     {
         _itemId = baseItemId;
         _lastPageAt = 0;
+        _answered = false;
         _accumulator.Begin();
 
         if (_listening)
             return;
 
         Services.MarketBoard.OfferingsReceived += OnOfferingsReceived;
+        Services.MarketBoard.HistoryReceived += OnHistoryReceived;
         _listening = true;
     }
 
@@ -37,11 +44,21 @@ internal sealed class MarketLookup
         if (_listening)
         {
             Services.MarketBoard.OfferingsReceived -= OnOfferingsReceived;
+            Services.MarketBoard.HistoryReceived -= OnHistoryReceived;
             _listening = false;
         }
 
         _lastPageAt = 0;
+        _answered = false;
         _accumulator.Begin();
+    }
+
+    // An item nobody is selling gets no offerings packet at all, so its sales history is the
+    // only thing that comes back - and unlike an empty offerings page it names its item.
+    private void OnHistoryReceived(IMarketBoardHistory history)
+    {
+        if (ItemIdNormalizer.ToBaseItemId(history.ItemId) == _itemId)
+            _answered = true;
     }
 
     private void OnOfferingsReceived(IMarketBoardCurrentOfferings offerings)

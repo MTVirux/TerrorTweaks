@@ -295,7 +295,7 @@ internal sealed class ListingHelperPanel
     private static string Ago(long ms)
     {
         var seconds = (int)(ms / 1000);
-        return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
+        return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m";
     }
 
     private int Wanted(PanelRow row) =>

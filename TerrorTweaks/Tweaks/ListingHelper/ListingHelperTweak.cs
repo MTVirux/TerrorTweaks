@@ -812,7 +812,8 @@ public sealed class ListingHelperTweak : Tweak
         }
 
         var cfg = Plugin.Config.ListingHelper;
-        var delay = _mode is RunMode.Reprice or RunMode.Duplicate ? cfg.DelayMs : cfg.LookupDelayMs;
+        // Only a lookup talks to the market board, so only a lookup needs its rate-limit spacing.
+        var delay = _mode == RunMode.Lookup ? cfg.LookupDelayMs : cfg.DelayMs;
         _resumeAt = Environment.TickCount64 + Math.Max(0, delay);
         BeginStep(Step.OpenMenu);
     }

@@ -22,4 +22,10 @@ public sealed class ListingHelperConfig
     // A market query is a real server request, so lookups are spaced out rather than fired
     // back to back - a throttled request never answers at all.
     public int LookupDelayMs { get; set; } = 3000;
+
+    // Off by default: it sends the item to a third party web service, which is not something to
+    // start doing on somebody's behalf.
+    public bool UseUniversalisFallback { get; set; }
+
+    public UniversalisSource UniversalisSource { get; set; } = UniversalisSource.CheapestThenSaleAverage;
 }

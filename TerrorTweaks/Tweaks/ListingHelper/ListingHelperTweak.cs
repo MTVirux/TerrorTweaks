@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Inventory;
@@ -112,11 +114,26 @@ public sealed class ListingHelperTweak : Tweak
 
     private readonly record struct CachedListings(List<MarketListing> Listings, long RecordedAt);
 
+    // Everything the fallback needs, taken at the moment the request goes out rather than when
+    // it comes back.
+    private readonly record struct UniversalisRequest(
+        UniversalisSource Source,
+        bool IgnoreQuality,
+        int UndercutGil,
+        string World,
+        string DataCentre,
+        ulong RetainerId,
+        bool BoardAnswered);
+
     private readonly Dictionary<MarketTarget, CachedListings> _cache = [];
     private readonly HashSet<ulong> _ownRetainers = [];
     private readonly MarketLookup _lookup = new();
     private readonly List<Job> _jobs = [];
     private readonly ListingHelperPanel _panel;
+
+    // A Universalis answer lands long after the step that asked for it, so turning the tweak off
+    // has to be able to drop one that is still on its way.
+    private CancellationTokenSource _web = new();
 
     private RunMode _mode;
     private string _runLabel = string.Empty;
@@ -161,6 +178,9 @@ public sealed class ListingHelperTweak : Tweak
         Services.PluginInterface.UiBuilder.Draw -= _panel.Draw;
         Services.ContextMenu.OnMenuOpened -= OnMenuOpened;
         _lookup.Stop();
+        _web.Cancel();
+        _web.Dispose();
+        _web = new CancellationTokenSource();
         _cache.Clear();
         _panel.Reset();
         base.Disable();
@@ -793,6 +813,7 @@ public sealed class ListingHelperTweak : Tweak
         {
             Services.Log.Debug($"Listing Helper: no listings arrived for item {target.ItemId}.");
             _panel.SetPrice(target, new UndercutResult(UndercutOutcome.NoListings, 0));
+            RequestUniversalisPrice(target, false);
             return;
         }
 
@@ -855,8 +876,86 @@ public sealed class ListingHelperTweak : Tweak
     private void RecordListings(MarketTarget target, IReadOnlyList<MarketListing> listings)
     {
         _cache[target] = new CachedListings([.. listings], Environment.TickCount64);
-        if (Price(target) is { } result)
-            _panel.SetPrice(target, result);
+        if (Price(target) is not { } result)
+            return;
+
+        _panel.SetPrice(target, result);
+
+        if (result.Outcome == UndercutOutcome.NoListings)
+            RequestUniversalisPrice(target, true);
+    }
+
+    // Fired off and left to land on its own: the answer only fills a box in the panel, so the
+    // run walks on to the next item rather than sitting on a web request.
+    private void RequestUniversalisPrice(MarketTarget target, bool boardAnswered)
+    {
+        var cfg = Plugin.Config.ListingHelper;
+        if (!cfg.UseUniversalisFallback)
+            return;
+
+        var (world, dataCentre) = HomeMarket();
+        if (dataCentre.Length == 0)
+        {
+            Services.Log.Debug("Listing Helper: no home world to ask Universalis about.");
+            return;
+        }
+
+        // Read here rather than in the continuation, so a setting changed while the request is
+        // in the air cannot price the answer under something the run never used.
+        var ignoreQuality = _running ? _ignoreQuality : cfg.IgnoreQuality;
+        _ = FetchUniversalisPrice(
+            target,
+            new UniversalisRequest(
+                cfg.UniversalisSource,
+                ignoreQuality,
+                cfg.UndercutGil,
+                world,
+                dataCentre,
+                ActiveRetainerId(),
+                boardAnswered),
+            _web.Token);
+    }
+
+    private async Task FetchUniversalisPrice(
+        MarketTarget target,
+        UniversalisRequest request,
+        CancellationToken token)
+    {
+        var item = await UniversalisClient.Fetch(target.ItemId, request.DataCentre, token).ConfigureAwait(false);
+        if (item is null || token.IsCancellationRequested)
+            return;
+
+        var price = UniversalisFallback.Resolve(
+            item,
+            request.Source,
+            target.HighQuality,
+            request.IgnoreQuality,
+            request.UndercutGil,
+            request.World,
+            request.DataCentre);
+
+        if (price.Basis == UniversalisBasis.None)
+        {
+            Services.Log.Debug($"Listing Helper: Universalis had nothing for item {target.ItemId} either.");
+            return;
+        }
+
+        await Services.Framework.RunOnFrameworkThread(() =>
+        {
+            // The panel drops its rows when another retainer is opened, so an answer that
+            // outlived the one that asked for it has nowhere left to go.
+            if (!token.IsCancellationRequested && ActiveRetainerId() == request.RetainerId)
+                _panel.SetUniversalisPrice(target, price, request.BoardAnswered);
+        }).ConfigureAwait(false);
+    }
+
+    private static (string World, string DataCentre) HomeMarket()
+    {
+        var player = Services.PlayerState;
+        if (!player.IsLoaded || player.HomeWorld.ValueNullable is not { } world)
+            return (string.Empty, string.Empty);
+
+        return (world.Name.ExtractText(), world.DataCenter.ValueNullable?.Name.ExtractText() ?? string.Empty);
     }
 
     internal bool Cached(MarketTarget target) => Fresh(target) is not null;
@@ -1319,6 +1418,8 @@ public sealed class ListingHelperTweak : Tweak
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Taken off the lowest listing found. Your own retainers are never undercut.");
 
+        DrawUniversalisConfig(cfg);
+
         var delay = cfg.DelayMs;
         ImGui.SetNextItemWidth(160);
         if (ImGui.SliderInt("Delay between listings (ms)##ListingHelper", ref delay, 100, 3000))
@@ -1341,4 +1442,64 @@ public sealed class ListingHelperTweak : Tweak
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Market board queries are rate limited by the server. Lower this at your own risk.");
     }
+
+    private static void DrawUniversalisConfig(ListingHelperConfig cfg)
+    {
+        var fallback = cfg.UseUniversalisFallback;
+        if (ImGui.Checkbox("Fall back to Universalis##ListingHelper", ref fallback))
+        {
+            cfg.UseUniversalisFallback = fallback;
+            Plugin.Config.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "When nothing is listed here, ask universalis.app what the rest of your data centre\n"
+                + "is doing with the item. Only items the board came back empty on are ever sent.");
+        }
+
+        ImGui.BeginDisabled(!cfg.UseUniversalisFallback);
+        ImGui.SetNextItemWidth(280);
+
+        if (ImGui.BeginCombo("Universalis price##ListingHelper", SourceLabel(cfg.UniversalisSource)))
+        {
+            foreach (var source in Enum.GetValues<UniversalisSource>())
+            {
+                if (ImGui.Selectable(SourceLabel(source), source == cfg.UniversalisSource))
+                {
+                    cfg.UniversalisSource = source;
+                    Plugin.Config.Save();
+                }
+
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(SourceTooltip(source));
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.EndDisabled();
+    }
+
+    private static string SourceLabel(UniversalisSource source) => source switch
+    {
+        UniversalisSource.CheapestListing => "Cheapest listing on your data centre",
+        UniversalisSource.SaleAverage => "Recent sale average",
+        _ => "Cheapest listing, then sale average",
+    };
+
+    private static string SourceTooltip(UniversalisSource source) => source switch
+    {
+        UniversalisSource.CheapestListing =>
+            "The lowest price anyone on your data centre is asking, undercut like any other\n"
+            + "competitor. Nothing is filled in if the whole data centre is empty too.",
+        UniversalisSource.SaleAverage =>
+            "What the item actually went for recently on your world, taken as it stands - there\n"
+            + "is nobody to undercut. Falls back to the whole data centre if your world has no\n"
+            + "recent sales.",
+        _ =>
+            "The lowest listing on your data centre if there is one, and the recent sale average\n"
+            + "if there is not.",
+    };
 }

@@ -21,6 +21,7 @@ internal sealed class ListingHelperPanel
     private static readonly Vector4 Muted   = new(0.65f, 0.65f, 0.65f, 1f);
     private static readonly Vector4 Warning = new(1f, 0.8f, 0.35f, 1f);
     private static readonly Vector4 Info    = new(0.55f, 0.8f, 1f, 1f);
+    private static readonly Vector4 Outside = new(0.78f, 0.66f, 1f, 1f);
 
     private static readonly Vector4 Green        = new(0.22f, 0.50f, 0.25f, 1f);
     private static readonly Vector4 GreenHovered = new(0.28f, 0.62f, 0.31f, 1f);
@@ -28,6 +29,11 @@ internal sealed class ListingHelperPanel
 
     private readonly Dictionary<MarketTarget, int> _inputs = [];
     private readonly Dictionary<MarketTarget, UndercutOutcome> _outcomes = [];
+
+    // Where a Universalis price came from, kept per row because the tooltip is the only place
+    // that says the number is not off this world's board.
+    private readonly Dictionary<MarketTarget, string> _notes = [];
+
     private readonly ListingHelperTweak _tweak;
 
     private ulong _retainerId;
@@ -40,14 +46,30 @@ internal sealed class ListingHelperPanel
     internal void SetPrice(MarketTarget target, UndercutResult result)
     {
         _outcomes[target] = result.Outcome;
+        _notes.Remove(target);
+
         if (result.Outcome != UndercutOutcome.NoListings)
             _inputs[target] = result.Price;
+    }
+
+    internal void SetUniversalisPrice(MarketTarget target, UniversalisPrice price, bool boardAnswered)
+    {
+        _outcomes[target] = UndercutOutcome.Universalis;
+        _inputs[target] = price.Price;
+
+        // A board that never answered is not the same as one with nothing on it, and only one of
+        // the two means the item is genuinely unsold here.
+        var reason = boardAnswered ? "Nothing listed here." : "The market board did not answer.";
+        _notes[target] = price.Basis == UniversalisBasis.Listing
+            ? $"{reason} Universalis has one on {price.Scope}."
+            : $"{reason} Universalis says it last sold on {price.Scope} for about this.";
     }
 
     internal void Reset()
     {
         _inputs.Clear();
         _outcomes.Clear();
+        _notes.Clear();
     }
 
     internal void Draw()
@@ -141,6 +163,9 @@ internal sealed class ListingHelperPanel
 
         foreach (var target in _outcomes.Keys.Where(target => !live.Contains(target)).ToList())
             _outcomes.Remove(target);
+
+        foreach (var target in _notes.Keys.Where(target => !live.Contains(target)).ToList())
+            _notes.Remove(target);
     }
 
     private void DrawTable(List<PanelRow> rows)
@@ -281,10 +306,11 @@ internal sealed class ListingHelperPanel
     {
         UndercutOutcome.NoListings => Warning,
         UndercutOutcome.HeldAtOwn => Info,
+        UndercutOutcome.Universalis => Outside,
         _ => null,
     };
 
-    private static string Tooltip(PanelRow row, UndercutOutcome? outcome)
+    private string Tooltip(PanelRow row, UndercutOutcome? outcome)
     {
         var listings = row.Listings == 1 ? "1 listing" : $"{row.Listings} listings";
         var text = $"{row.Quantity:N0} in {listings}";
@@ -293,6 +319,7 @@ internal sealed class ListingHelperPanel
         {
             UndercutOutcome.NoListings => $"{text}\nNothing listed on the market to undercut.",
             UndercutOutcome.HeldAtOwn => $"{text}\nYour own retainer is the lowest, so the price was left alone.",
+            UndercutOutcome.Universalis when _notes.TryGetValue(row.Target, out var note) => $"{text}\n{note}",
             _ => text,
         };
     }

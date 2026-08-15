@@ -10,6 +10,10 @@ internal enum UndercutOutcome
     Undercut,
     HeldAtOwn,
     NoListings,
+
+    // Never returned from here - the board had nothing, so the price came off Universalis
+    // instead. It sits with the rest so a row has one verdict to colour and explain itself by.
+    Universalis,
 }
 
 internal readonly record struct UndercutResult(UndercutOutcome Outcome, int Price);

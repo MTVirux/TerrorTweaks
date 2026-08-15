@@ -242,11 +242,7 @@ internal sealed class ListingHelperPanel
         PopGreen(cached);
 
         if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip(cached
-                ? "Prices are already stored for this item. Checks the market board again and replaces them."
-                : "Check the market board for this item and fill in an undercut price.");
-        }
+            ImGui.SetTooltip("Update price from MB");
 
         ImGui.SameLine();
 

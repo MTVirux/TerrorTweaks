@@ -250,13 +250,24 @@ internal sealed class ListingHelperPanel
 
         ImGui.SameLine();
 
+        // Green once the listings already sit at the number in the box, so a row with nothing
+        // left to do reads as done without pressing it.
+        var applied = Matches(row);
+        PushGreen(applied);
+
         ImGui.BeginDisabled(busy);
         if (ImGuiComponents.IconButton($"##apply{id}", FontAwesomeIcon.Check))
             _tweak.Apply(row.Target, Wanted(row));
         ImGui.EndDisabled();
 
+        PopGreen(applied);
+
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Reprice this item's listings to the value in its box.");
+        {
+            ImGui.SetTooltip(applied
+                ? "This item's listings are already at the value in its box."
+                : "Reprice this item's listings to the value in its box.");
+        }
 
         ImGui.SameLine();
 

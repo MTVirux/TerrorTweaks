@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.Gui.ContextMenu;
+using Dalamud.Game.Inventory;
 using Dalamud.Game.Text;
 using Dalamud.Memory;
 using Dalamud.Plugin.Services;
@@ -16,6 +18,9 @@ namespace TerrorTweaks.Tweaks.ListingHelper;
 internal readonly record struct MarketTarget(uint ItemId, bool HighQuality);
 
 internal readonly record struct AddonBounds(float X, float Y, float Width, float Height);
+
+// One market listing as it stands right now - what a duplicate of it has to look like.
+internal readonly record struct ListingSource(MarketTarget Target, int Price, int Quantity);
 
 internal readonly record struct PanelRow(
     MarketTarget Target,
@@ -71,6 +76,7 @@ public sealed class ListingHelperTweak : Tweak
         Reprice,
         Lookup,
         Remove,
+        Duplicate,
     }
 
     private enum Step
@@ -85,9 +91,19 @@ public sealed class ListingHelperTweak : Tweak
         CancelSell,
         PickReturn,
         SettleRemove,
+        PickPutUpForSale,
+        EnterListing,
+        SettleDuplicate,
     }
 
-    private readonly record struct Job(MarketTarget Target, int Slot, int Price);
+    private readonly record struct Job(MarketTarget Target, int Slot, int Price)
+    {
+        // A duplicate acts on a bag slot rather than a market one, so it carries which side of
+        // the sale it draws from and how big the stack it is copying is.
+        public BagSide Side { get; init; }
+
+        public int Quantity { get; init; }
+    }
 
     private readonly Dictionary<MarketTarget, List<MarketListing>> _cache = [];
     private readonly HashSet<ulong> _ownRetainers = [];
@@ -100,6 +116,7 @@ public sealed class ListingHelperTweak : Tweak
     private int _jobIndex;
     private int _updated;
     private int _matchesBefore;
+    private int _listedBefore;
     private Step _step;
     private long _stepDeadline;
     private long _resumeAt;
@@ -119,11 +136,13 @@ public sealed class ListingHelperTweak : Tweak
 
     public override string Description =>
         "Adds a panel to the retainer sell list for undercutting the market board price of " +
-        "everything the retainer has listed.";
+        "everything the retainer has listed, plus \"Duplicate Listing\" and \"Recursive " +
+        "Duplicate\" entries that put up more copies of a listing from the same stock.";
 
     public override void Enable()
     {
         base.Enable();
+        Services.ContextMenu.OnMenuOpened += OnMenuOpened;
         Services.PluginInterface.UiBuilder.Draw += _panel.Draw;
     }
 
@@ -133,10 +152,102 @@ public sealed class ListingHelperTweak : Tweak
             Finish("the tweak was turned off");
 
         Services.PluginInterface.UiBuilder.Draw -= _panel.Draw;
+        Services.ContextMenu.OnMenuOpened -= OnMenuOpened;
         _lookup.Stop();
         _cache.Clear();
         _panel.Reset();
         base.Disable();
+    }
+
+    private void OnMenuOpened(IMenuOpenedArgs args)
+    {
+        if (ResolveListing(args) is not { } listing)
+            return;
+
+        args.AddMenuItem(MenuPrefix.Item("Duplicate Listing", _ => Duplicate(listing, 1)));
+        args.AddMenuItem(MenuPrefix.Item("Recursive Duplicate", _ => Duplicate(listing, DuplicatePlan.MarketSlots)));
+    }
+
+    private static unsafe ListingSource? ResolveListing(IMenuOpenedArgs args)
+    {
+        if (args.Target is MenuTargetInventory inventory)
+        {
+            return inventory.TargetItem is { ContainerType: GameInventoryType.RetainerMarket } item
+                ? ReadListing((int)item.InventorySlot)
+                : null;
+        }
+
+        if (args.MenuType != ContextMenuType.Default || args.AddonName != SellListAddonName)
+            return null;
+
+        var itemId = ReadItemDetailAgentItemId();
+        if (itemId == 0)
+            return null;
+
+        // This path only reports an item, not which of its listings was clicked, so the first
+        // one of that exact quality stands in for it.
+        var target = new MarketTarget(ItemIdNormalizer.ToBaseItemId(itemId), ItemIdNormalizer.IsHighQuality(itemId));
+        return ReadListing(FirstSlot(target, false));
+    }
+
+    private static unsafe ListingSource? ReadListing(int slot)
+    {
+        var container = MarketContainer();
+        var manager = InventoryManager.Instance();
+        if (container is null || manager is null || slot < 0 || slot >= container->Size)
+            return null;
+
+        var item = container->GetInventorySlot(slot);
+        if (item is null || item->ItemId == 0)
+            return null;
+
+        var target = new MarketTarget(
+            ItemIdNormalizer.ToBaseItemId(item->ItemId),
+            item->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality));
+
+        var price = (int)Math.Clamp(manager->GetRetainerMarketPrice((short)slot), 0, int.MaxValue);
+        return new ListingSource(target, price, item->Quantity);
+    }
+
+    private void Duplicate(ListingSource listing, int wanted)
+    {
+        if (!CanStart())
+            return;
+
+        var side = DuplicateSource.Side();
+        var sources = DuplicateSource.Find(listing.Target, side);
+
+        var stacks = new List<int>(sources.Count);
+        foreach (var source in sources)
+            stacks.Add(source.Quantity);
+
+        var plan = DuplicatePlan.Build(stacks, listing.Quantity, OccupiedMarketSlots(), wanted);
+
+        if (plan.Block == DuplicateBlock.MarketFull)
+        {
+            Services.Chat.PrintError("Listing Helper: this retainer has no market slot left to list into.");
+            return;
+        }
+
+        var name = ItemName(listing.Target.ItemId, listing.Target.HighQuality);
+        if (!plan.CanStart)
+        {
+            Services.Chat.PrintError(
+                $"Listing Helper: {DuplicateSource.Describe(side)} does not hold another {listing.Quantity} of {name}.");
+            return;
+        }
+
+        var jobs = new List<Job>();
+        for (var copy = 0; copy < plan.Copies; copy++)
+            jobs.Add(new Job(listing.Target, 0, listing.Price) { Side = side, Quantity = listing.Quantity });
+
+        // Carried through only so the panel keeps pricing the way it was; a duplicate itself
+        // always matches quality exactly, whatever this says.
+        Begin(
+            RunMode.Duplicate,
+            jobs,
+            Plugin.Config.ListingHelper.IgnoreQuality,
+            $"{Listings(plan.Copies)} of {listing.Quantity}x {name} at {listing.Price:N0} gil");
     }
 
     internal void ApplyAll(IReadOnlyDictionary<MarketTarget, int> prices)
@@ -253,9 +364,13 @@ public sealed class ListingHelperTweak : Tweak
         BeginStep(Step.OpenMenu);
 
         Services.Framework.Update += OnFrameworkUpdate;
-        Services.Chat.Print(mode == RunMode.Reprice
-            ? $"Listing Helper: setting {label}."
-            : $"Listing Helper: checking market prices for {label}.");
+        Services.Chat.Print(mode switch
+        {
+            RunMode.Reprice => $"Listing Helper: setting {label}.",
+            RunMode.Remove => $"Listing Helper: taking {label} off the market.",
+            RunMode.Duplicate => $"Listing Helper: putting up {label}.",
+            _ => $"Listing Helper: checking market prices for {label}.",
+        });
     }
 
     internal void Stop()
@@ -319,6 +434,15 @@ public sealed class ListingHelperTweak : Tweak
             case Step.SettleRemove:
                 SettleRemove();
                 break;
+            case Step.PickPutUpForSale:
+                PickPutUpForSale();
+                break;
+            case Step.EnterListing:
+                EnterListing();
+                break;
+            case Step.SettleDuplicate:
+                SettleDuplicate();
+                break;
         }
     }
 
@@ -341,6 +465,11 @@ public sealed class ListingHelperTweak : Tweak
                 ForceClose(SellAddonName);
                 NextJob();
                 break;
+            case Step.EnterListing:
+            case Step.SettleDuplicate:
+                CloseStrandedSell();
+                Finish($"the game stopped responding while it was {StepDescription(_step)}");
+                break;
             default:
                 Finish($"the game stopped responding while it was {StepDescription(_step)}");
                 break;
@@ -351,6 +480,12 @@ public sealed class ListingHelperTweak : Tweak
 
     private unsafe void OpenMenu()
     {
+        if (_mode == RunMode.Duplicate)
+        {
+            OpenSourceMenu();
+            return;
+        }
+
         var job = Current;
 
         // Pulling a listing renumbers what sits behind it, so removal re-finds its target every
@@ -435,6 +570,110 @@ public sealed class ListingHelperTweak : Tweak
         _updated++;
         NextJob();
     }
+
+    private unsafe void OpenSourceMenu()
+    {
+        var job = Current;
+
+        // Putting a stack up empties the bag slot it came out of and shuffles what follows, so
+        // the source is found again for every copy rather than trusted from before the run.
+        if (DuplicateSource.FirstHolding(job.Target, job.Side, job.Quantity) is not { } source)
+        {
+            Finish($"{DuplicateSource.Describe(job.Side)} ran out of that item");
+            return;
+        }
+
+        // The menu the user clicked ours from can still be on screen; opening ours while it is
+        // would leave the next step firing at somebody else's item.
+        if (VisibleAddon(ContextMenuAddonName) is not null)
+            return;
+
+        var context = AgentInventoryContext.Instance();
+        if (context is null)
+        {
+            Finish("the retainer window went away");
+            return;
+        }
+
+        _matchesBefore = OccupiedMarketSlots();
+        _listedBefore = MarketQuantity(job.Target);
+
+        context->OpenForItemSlot(source.Container, source.Slot, 0, DuplicateSource.OwnerAddonId(job.Side));
+        BeginStep(Step.PickPutUpForSale);
+    }
+
+    // A bag item's menu holds a different set depending on where the player is standing, so the
+    // sale entry is found by its label. Firing a guessed index would discard or use the stack.
+    private unsafe void PickPutUpForSale()
+    {
+        var menu = VisibleAddon(ContextMenuAddonName);
+        if (menu is null || !menu->IsReady)
+            return;
+
+        var entries = MenuEntries(menu);
+        Services.Log.Debug($"Listing Helper: context menu held [{string.Join(" | ", entries)}]");
+
+        var entry = entries.FindIndex(IsSellEntry);
+        if (entry < 0)
+        {
+            Finish($"nothing on the menu offered to put it up for sale - it held [{string.Join(" | ", entries)}]");
+            return;
+        }
+
+        FireMenuEntry(menu, entry);
+        BeginStep(Step.EnterListing);
+    }
+
+    private unsafe void EnterListing()
+    {
+        var sell = SellAddon();
+        if (sell is null || sell->AskingPrice is null || sell->Quantity is null)
+            return;
+
+        var job = Current;
+        sell->Quantity->SetValue(job.Quantity);
+        sell->AskingPrice->SetValue(job.Price);
+
+        // Same window and same confirm button as a reprice, so it answers on the same callback;
+        // the quantity is read off the input above. Logged because a fresh listing is the one
+        // place that pairing has not been proven, and a wrong one puts up a wrong offer.
+        Services.Log.Debug($"Listing Helper: listing {job.Quantity}x item {job.Target.ItemId} at {job.Price} gil.");
+
+        var values = stackalloc AtkValue[2];
+        values[0] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+        values[1] = new AtkValue { Type = AtkValueType.Int, Int = job.Price };
+        sell->AtkUnitBase.FireCallback(2, values, true);
+
+        BeginStep(Step.SettleDuplicate);
+    }
+
+    private unsafe void SettleDuplicate()
+    {
+        if (VisibleAddon(SellAddonName) is not null)
+            return;
+
+        // The copy only exists once the server puts it in the market container, which is also
+        // the only confirmation that the callback above did what it was supposed to.
+        if (OccupiedMarketSlots() <= _matchesBefore)
+            return;
+
+        // The sell window defaults to the whole stack, so a quantity that did not take would
+        // list far more than was asked for. Checked here rather than trusted, because a
+        // recursive run would otherwise repeat the same mistake nineteen more times.
+        var listed = MarketQuantity(Current.Target) - _listedBefore;
+        if (listed != Current.Quantity)
+        {
+            _updated++;
+            Finish($"a copy went up as {listed} rather than {Current.Quantity}");
+            return;
+        }
+
+        _updated++;
+        NextJob();
+    }
+
+    private static bool IsSellEntry(string entry) =>
+        entry.Contains("Put Up for Sale", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsReturnEntry(string entry) =>
         entry.Contains("Return", StringComparison.OrdinalIgnoreCase)
@@ -573,7 +812,7 @@ public sealed class ListingHelperTweak : Tweak
         }
 
         var cfg = Plugin.Config.ListingHelper;
-        var delay = _mode == RunMode.Reprice ? cfg.DelayMs : cfg.LookupDelayMs;
+        var delay = _mode is RunMode.Reprice or RunMode.Duplicate ? cfg.DelayMs : cfg.LookupDelayMs;
         _resumeAt = Environment.TickCount64 + Math.Max(0, delay);
         BeginStep(Step.OpenMenu);
     }
@@ -635,6 +874,14 @@ public sealed class ListingHelperTweak : Tweak
             Services.Chat.Print(reason is null
                 ? $"Listing Helper: took {_runLabel} off the market."
                 : $"Listing Helper: stopped after removing {Listings(_updated)} - {reason}.");
+            return;
+        }
+
+        if (_mode == RunMode.Duplicate)
+        {
+            Services.Chat.Print(reason is null
+                ? $"Listing Helper: put up {_runLabel}."
+                : $"Listing Helper: stopped after putting up {Listings(_updated)} - {reason}.");
             return;
         }
 
@@ -707,6 +954,29 @@ public sealed class ListingHelperTweak : Tweak
         }
 
         return occupied;
+    }
+
+    private static unsafe int OccupiedMarketSlots()
+    {
+        var container = MarketContainer();
+        return container is null ? 0 : OccupiedSlots(container);
+    }
+
+    private static unsafe int MarketQuantity(MarketTarget target)
+    {
+        var total = 0;
+        var container = MarketContainer();
+        if (container is null)
+            return total;
+
+        for (var i = 0; i < container->Size; i++)
+        {
+            var item = container->GetInventorySlot(i);
+            if (Matches(item, target, false))
+                total += item->Quantity;
+        }
+
+        return total;
     }
 
     internal static unsafe bool SellListOpen() => LoadedAddon(SellListAddonName) is not null;
@@ -859,6 +1129,21 @@ public sealed class ListingHelperTweak : Tweak
         addon->Close(true);
     }
 
+    // A confirm that never landed leaves the sell window sitting on screen, and nothing else
+    // takes it down once the run has given up.
+    private static unsafe void CloseStrandedSell()
+    {
+        var sell = VisibleAddon(SellAddonName);
+        if (sell is not null)
+            sell->Close(true);
+    }
+
+    private static unsafe uint ReadItemDetailAgentItemId()
+    {
+        var agent = AgentItemDetail.Instance();
+        return agent is null ? 0 : agent->ItemId;
+    }
+
     internal static string ItemName(uint itemId, bool highQuality)
     {
         var name = ItemNames.Lookup(itemId);
@@ -877,6 +1162,9 @@ public sealed class ListingHelperTweak : Tweak
         Step.CloseSearch => "closing the market board",
         Step.PickReturn => "picking the return entry",
         Step.SettleRemove => "waiting for the listing to come off",
+        Step.PickPutUpForSale => "picking Put Up for Sale",
+        Step.EnterListing => "waiting for the sell window",
+        Step.SettleDuplicate => "waiting for the copy to go up",
         _ => "closing the price window",
     };
 

@@ -26,6 +26,7 @@
     <Compile Include="..\..\TerrorTweaks\Tweaks\BulkPurchase\BulkPurchasePlan.cs" Link="BulkPurchasePlan.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\UndercutCalculator.cs" Link="UndercutCalculator.cs" />
     <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\MarketListingAccumulator.cs" Link="MarketListingAccumulator.cs" />
+    <Compile Include="..\..\TerrorTweaks\Tweaks\ListingHelper\DuplicatePlan.cs" Link="DuplicatePlan.cs" />
   </ItemGroup>
 
 </Project>

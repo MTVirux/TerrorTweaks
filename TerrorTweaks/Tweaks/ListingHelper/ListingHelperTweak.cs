@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Game.Gui.ContextMenu;
-using Dalamud.Game.Inventory;
 using Dalamud.Game.Text;
 using Dalamud.Memory;
 using Dalamud.Plugin.Services;
@@ -120,14 +118,12 @@ public sealed class ListingHelperTweak : Tweak
     public override string Name => "Listing Helper";
 
     public override string Description =>
-        "Adds an \"Update entries of this item\" entry to the retainer sell list that reprices " +
-        "every listing of that item to the gil amount on your clipboard, plus a panel for " +
-        "undercutting the market board price of everything the retainer has listed.";
+        "Adds a panel to the retainer sell list for undercutting the market board price of " +
+        "everything the retainer has listed.";
 
     public override void Enable()
     {
         base.Enable();
-        Services.ContextMenu.OnMenuOpened += OnMenuOpened;
         Services.PluginInterface.UiBuilder.Draw += _panel.Draw;
     }
 
@@ -137,65 +133,10 @@ public sealed class ListingHelperTweak : Tweak
             Finish("the tweak was turned off");
 
         Services.PluginInterface.UiBuilder.Draw -= _panel.Draw;
-        Services.ContextMenu.OnMenuOpened -= OnMenuOpened;
         _lookup.Stop();
         _cache.Clear();
         _panel.Reset();
         base.Disable();
-    }
-
-    private void OnMenuOpened(IMenuOpenedArgs args)
-    {
-        if (ResolveTarget(args) is not { } target)
-            return;
-
-        args.AddMenuItem(MenuPrefix.Item("Update entries of this item", _ => StartFromClipboard(target)));
-    }
-
-    private static MarketTarget? ResolveTarget(IMenuOpenedArgs args)
-    {
-        if (args.Target is MenuTargetInventory inventory)
-        {
-            return inventory.TargetItem is { ContainerType: GameInventoryType.RetainerMarket } item
-                ? new MarketTarget(ItemIdNormalizer.ToBaseItemId(item.ItemId), item.IsHq)
-                : null;
-        }
-
-        if (args.MenuType != ContextMenuType.Default || args.AddonName != SellListAddonName)
-            return null;
-
-        var itemId = ReadItemDetailAgentItemId();
-        return itemId == 0
-            ? null
-            : new MarketTarget(ItemIdNormalizer.ToBaseItemId(itemId), ItemIdNormalizer.IsHighQuality(itemId));
-    }
-
-    private void StartFromClipboard(MarketTarget target)
-    {
-        if (!CanStart())
-            return;
-
-        var clipboard = ImGui.GetClipboardText() ?? string.Empty;
-        if (!ClipboardPrice.TryParse(clipboard, out var price))
-        {
-            Services.Chat.PrintError($"Listing Helper: the clipboard does not hold a price ({QuoteClipboard(clipboard)}).");
-            return;
-        }
-
-        var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
-        var slots = FindSlots(target, ignoreQuality);
-        if (slots.Count == 0)
-        {
-            Services.Chat.PrintError("Listing Helper: this retainer has no listing of that item.");
-            return;
-        }
-
-        var jobs = new List<Job>();
-        foreach (var slot in slots)
-            jobs.Add(new Job(target, slot, price));
-
-        var name = ItemName(target.ItemId, target.HighQuality && !ignoreQuality);
-        Begin(RunMode.Reprice, jobs, ignoreQuality, $"{Listings(jobs.Count)} of {name} to {price:N0} gil");
     }
 
     internal void ApplyAll(IReadOnlyDictionary<MarketTarget, int> prices)
@@ -918,12 +859,6 @@ public sealed class ListingHelperTweak : Tweak
         addon->Close(true);
     }
 
-    private static unsafe uint ReadItemDetailAgentItemId()
-    {
-        var agent = AgentItemDetail.Instance();
-        return agent is null ? 0 : agent->ItemId;
-    }
-
     internal static string ItemName(uint itemId, bool highQuality)
     {
         var name = ItemNames.Lookup(itemId);
@@ -931,12 +866,6 @@ public sealed class ListingHelperTweak : Tweak
     }
 
     private static string Listings(int count) => count == 1 ? "1 listing" : $"{count} listings";
-
-    private static string QuoteClipboard(string clipboard)
-    {
-        var text = clipboard.Trim().ReplaceLineEndings(" ");
-        return text.Length == 0 ? "it is empty" : $"\"{(text.Length > 24 ? text[..24] + "..." : text)}\"";
-    }
 
     private static string StepDescription(Step step) => step switch
     {

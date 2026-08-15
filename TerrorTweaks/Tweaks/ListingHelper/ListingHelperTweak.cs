@@ -100,7 +100,6 @@ public sealed class ListingHelperTweak : Tweak
         AwaitListings,
         CloseSearch,
         CancelSell,
-        PickReturn,
         SettleRemove,
         PickPutUpForSale,
         EnterListing,
@@ -551,9 +550,6 @@ public sealed class ListingHelperTweak : Tweak
             case Step.CancelSell:
                 CancelSell();
                 break;
-            case Step.PickReturn:
-                PickReturn();
-                break;
             case Step.SettleRemove:
                 SettleRemove();
                 break;
@@ -627,6 +623,12 @@ public sealed class ListingHelperTweak : Tweak
             return;
         }
 
+        if (_mode == RunMode.Remove)
+        {
+            ReturnListing(slot);
+            return;
+        }
+
         // The menu the user clicked ours from can still be on screen; opening ours while it is
         // would leave the next step firing at somebody else's item.
         if (VisibleAddon(ContextMenuAddonName) is not null)
@@ -643,7 +645,7 @@ public sealed class ListingHelperTweak : Tweak
         _matchesBefore = FindSlots(job.Target, _ignoreQuality).Count;
 
         context->OpenForItemSlot(InventoryType.RetainerMarket, slot, 0, sellList->Id);
-        BeginStep(_mode == RunMode.Remove ? Step.PickReturn : Step.PickAdjustPrice);
+        BeginStep(Step.PickAdjustPrice);
     }
 
     private unsafe void PickAdjustPrice()
@@ -658,37 +660,42 @@ public sealed class ListingHelperTweak : Tweak
         BeginStep(_mode == RunMode.Reprice ? Step.EnterPrice : Step.ComparePrices);
     }
 
-    // Adjust Price sits at a known index but the return entry does not - the game puts a
-    // different set on the menu depending on the listing - so this one is found by its label.
-    // Firing a guessed index would pull some other lever on a real listing.
-    private unsafe void PickReturn()
+    // Neither destination can be reached from the menu that opens for a market slot: it offers the
+    // player's side only, and the entry that hands a stack back to the retainer belongs to the menu
+    // the sell list builds for itself on a right click, which nothing here can make it build. So a
+    // removal moves the stack outright, the way the game's own entries do.
+    private unsafe void ReturnListing(int slot)
     {
-        var menu = VisibleAddon(ContextMenuAddonName);
-        if (menu is null || !menu->IsReady)
-            return;
-
-        var entries = MenuEntries(menu);
-        Services.Log.Debug($"Listing Helper: context menu held [{string.Join(" | ", entries)}]");
-
-        var entry = entries.FindIndex(text => IsReturnEntry(text, _returnTo));
-        if (entry < 0)
+        var manager = InventoryManager.Instance();
+        var container = MarketContainer();
+        if (manager is null || container is null)
         {
-            Finish($"nothing on the menu offered to return it to {DuplicateSource.Describe(_returnTo)}"
-                   + $" - it held [{string.Join(" | ", entries)}]");
+            Finish("the retainer window went away");
             return;
         }
 
-        FireMenuEntry(menu, entry);
+        var item = container->GetInventorySlot(slot);
+        if (item is null || item->ItemId == 0)
+        {
+            NextJob();
+            return;
+        }
+
+        _matchesBefore = FindSlots(Current.Target, _ignoreQuality).Count;
+
+        var quantity = (uint)item->Quantity;
+        var moved = _returnTo == BagSide.Retainer
+            ? manager->MoveFromRetainerMarketToRetainerInventory(InventoryType.RetainerMarket, (ushort)slot, quantity)
+            : manager->MoveFromRetainerMarketToPlayerInventory(InventoryType.RetainerMarket, (ushort)slot, quantity);
+
+        Services.Log.Debug($"Listing Helper: moved slot {slot} to {_returnTo}, got {moved}.");
         BeginStep(Step.SettleRemove);
     }
 
     private unsafe void SettleRemove()
     {
-        if (VisibleAddon(ContextMenuAddonName) is not null)
-            return;
-
         // The listing is only really gone once the server drops it out of the container, which
-        // is also the only confirmation that the entry did what it was supposed to.
+        // is also the only confirmation that the move did what it was supposed to.
         if (FindSlots(Current.Target, _ignoreQuality).Count >= _matchesBefore)
             return;
 
@@ -823,21 +830,6 @@ public sealed class ListingHelperTweak : Tweak
 
     private static bool IsSellEntry(string entry) =>
         entry.Contains("Put Up for Sale", StringComparison.OrdinalIgnoreCase);
-
-    // The menu carries a return entry per destination, and they read the same but for the word
-    // "Retainer" - one drops the stack in the player's bags, the other hands it back to the
-    // retainer. Taking whichever comes first would send half of them to the wrong place.
-    private static bool IsReturnEntry(string entry, BagSide destination)
-    {
-        if (!entry.Contains("Return", StringComparison.OrdinalIgnoreCase)
-            && !entry.Contains("Retrieve", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var retainer = entry.Contains("Retainer", StringComparison.OrdinalIgnoreCase);
-        return destination == BagSide.Retainer ? retainer : !retainer;
-    }
 
     private static unsafe void FireMenuEntry(AtkUnitBase* menu, int entry)
     {
@@ -1451,7 +1443,6 @@ public sealed class ListingHelperTweak : Tweak
         Step.ComparePrices => "opening the market board",
         Step.AwaitListings => "waiting for market prices",
         Step.CloseSearch => "closing the market board",
-        Step.PickReturn => "picking the return entry",
         Step.SettleRemove => "waiting for the listing to come off",
         Step.PickPutUpForSale => "picking Put Up for Sale",
         Step.EnterListing => "waiting for the sell window",

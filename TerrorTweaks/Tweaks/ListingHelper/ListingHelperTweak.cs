@@ -167,6 +167,9 @@ public sealed class ListingHelperTweak : Tweak
     // would land on whatever has opened behind it.
     private bool _cancelFired;
 
+    // A broken sheet row is worth saying once, not on every menu the run opens.
+    private bool _warnedMissingLabel;
+
     public ListingHelperTweak()
     {
         _panel = new ListingHelperPanel(this);
@@ -183,6 +186,7 @@ public sealed class ListingHelperTweak : Tweak
     public override void Enable()
     {
         base.Enable();
+        _warnedMissingLabel = false;
         Services.ContextMenu.OnMenuOpened += OnMenuOpened;
         Services.PluginInterface.UiBuilder.Draw += _panel.Draw;
     }
@@ -814,7 +818,8 @@ public sealed class ListingHelperTweak : Tweak
         var entries = MenuEntries(menu);
         Services.Log.Debug($"Listing Helper: context menu held [{string.Join(" | ", entries)}]");
 
-        var entry = entries.FindIndex(IsSellEntry);
+        var label = PutUpForSaleLabel();
+        var entry = entries.FindIndex(e => e.Contains(label, StringComparison.OrdinalIgnoreCase));
         if (entry < 0)
         {
             Finish($"nothing on the menu offered to put it up for sale - it held [{string.Join(" | ", entries)}]");
@@ -897,17 +902,25 @@ public sealed class ListingHelperTweak : Tweak
         NextJob();
     }
 
-    private static bool IsSellEntry(string entry) =>
-        entry.Contains(PutUpForSaleLabel(), StringComparison.OrdinalIgnoreCase);
-
     // The entry's own label out of the Addon sheet, which Dalamud serves in whatever language the
     // client is running, so a German or Japanese menu matches as well as an English one. Row 99 is
     // the inventory menu's sale entry - the same row AutoRetainer reads for it.
-    private static string PutUpForSaleLabel()
+    private string PutUpForSaleLabel()
     {
         var sheet = Services.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>();
         if (sheet.TryGetRow(PutUpForSaleRow, out var row) && row.Text.ExtractText() is { Length: > 0 } label)
             return label;
+
+        // A game update that moved the row leaves every non-English client with no way to find the
+        // entry, which is a plugin bug rather than anything the player did. Said once: the sheet
+        // will not answer differently later in the session.
+        if (!_warnedMissingLabel)
+        {
+            _warnedMissingLabel = true;
+            Services.Chat.PrintError(
+                $"Listing Helper: the game has no text for Addon row {PutUpForSaleRow}, so the sale " +
+                "entry can only be matched in English. Please let @mtvirux know on Discord.");
+        }
 
         // An empty needle would match the first entry on the menu, whatever it happens to be.
         return "Put Up for Sale";

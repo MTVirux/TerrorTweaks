@@ -22,6 +22,10 @@ internal sealed class ListingHelperPanel
     private static readonly Vector4 Warning = new(1f, 0.8f, 0.35f, 1f);
     private static readonly Vector4 Info    = new(0.55f, 0.8f, 1f, 1f);
 
+    private static readonly Vector4 Green        = new(0.22f, 0.50f, 0.25f, 1f);
+    private static readonly Vector4 GreenHovered = new(0.28f, 0.62f, 0.31f, 1f);
+    private static readonly Vector4 GreenActive  = new(0.18f, 0.42f, 0.20f, 1f);
+
     private readonly Dictionary<MarketTarget, int> _inputs = [];
     private readonly Dictionary<MarketTarget, UndercutOutcome> _outcomes = [];
     private readonly ListingHelperTweak _tweak;
@@ -199,13 +203,31 @@ internal sealed class ListingHelperPanel
             _inputs[row.Target] = Math.Clamp(price, UndercutCalculator.MinPrice, UndercutCalculator.MaxPrice);
 
         ImGui.TableNextColumn();
+
+        // Green marks an item this session already holds listings for - the button throws them
+        // away and asks again, so it is worth seeing which ones there is something to throw.
+        var cached = _tweak.Cached(row.Target);
+        if (cached)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Button, Green);
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, GreenHovered);
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, GreenActive);
+        }
+
         ImGui.BeginDisabled(busy);
         if (ImGuiComponents.IconButton($"##update{id}", FontAwesomeIcon.SyncAlt))
             _tweak.RequestPrices([row.Target]);
         ImGui.EndDisabled();
 
+        if (cached)
+            ImGui.PopStyleColor(3);
+
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Check the market board for this item and fill in an undercut price.");
+        {
+            ImGui.SetTooltip(cached
+                ? "Prices are already stored for this item. Checks the market board again and replaces them."
+                : "Check the market board for this item and fill in an undercut price.");
+        }
 
         ImGui.SameLine();
 

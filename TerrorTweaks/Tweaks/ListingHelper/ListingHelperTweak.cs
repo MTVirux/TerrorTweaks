@@ -853,6 +853,8 @@ public sealed class ListingHelperTweak : Tweak
             _panel.SetPrice(target, result);
     }
 
+    internal bool Cached(MarketTarget target) => _cache.ContainsKey(target);
+
     private UndercutResult? Price(MarketTarget target)
     {
         if (!_cache.TryGetValue(target, out var listings))

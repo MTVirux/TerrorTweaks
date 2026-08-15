@@ -81,12 +81,40 @@ public class BulkPurchasePlanTests
         => Assert.False(BulkPurchasePlan.Build(24000, 1, 999, long.MaxValue, freeSlots: 25).SpaceWarning);
 
     [Fact]
+    public void Build_NonStackable_IsOnePurchasePerItem()
+    {
+        Assert.Equal(1, BulkPurchasePlan.Build(1, 1, 1, long.MaxValue, 99).Purchases);
+        Assert.Equal(40, BulkPurchasePlan.Build(40, 1, 1, long.MaxValue, 99).Purchases);
+    }
+
+    [Fact]
+    public void BatchCap_IsTheSmallerOfStackSizeAnd99()
+    {
+        Assert.Equal(1, BulkPurchasePlan.BatchCap(1));
+        Assert.Equal(99, BulkPurchasePlan.BatchCap(999));
+        Assert.Equal(99, BulkPurchasePlan.BatchCap(9999));
+        Assert.Equal(12, BulkPurchasePlan.BatchCap(12));
+    }
+
+    [Fact]
+    public void BatchCap_UnknownStackSize_FallsBackTo99()
+        => Assert.Equal(99, BulkPurchasePlan.BatchCap(0));
+
+    [Fact]
     public void NextBatch_CapsAt99AndFloorsAtZero()
     {
-        Assert.Equal(99, BulkPurchasePlan.NextBatch(24000));
-        Assert.Equal(99, BulkPurchasePlan.NextBatch(99));
-        Assert.Equal(7, BulkPurchasePlan.NextBatch(7));
-        Assert.Equal(0, BulkPurchasePlan.NextBatch(0));
-        Assert.Equal(0, BulkPurchasePlan.NextBatch(-3));
+        Assert.Equal(99, BulkPurchasePlan.NextBatch(24000, 999));
+        Assert.Equal(99, BulkPurchasePlan.NextBatch(99, 999));
+        Assert.Equal(7, BulkPurchasePlan.NextBatch(7, 999));
+        Assert.Equal(0, BulkPurchasePlan.NextBatch(0, 999));
+        Assert.Equal(0, BulkPurchasePlan.NextBatch(-3, 999));
+    }
+
+    [Fact]
+    public void NextBatch_NonStackable_IsOneAtATime()
+    {
+        Assert.Equal(1, BulkPurchasePlan.NextBatch(40, 1));
+        Assert.Equal(1, BulkPurchasePlan.NextBatch(1, 1));
+        Assert.Equal(0, BulkPurchasePlan.NextBatch(0, 1));
     }
 }

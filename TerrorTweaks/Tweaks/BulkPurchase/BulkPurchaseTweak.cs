@@ -45,7 +45,8 @@ public sealed class BulkPurchaseTweak : Tweak
 
     public override string Description =>
         "Adds a \"Bulk Purchase\" entry to gil vendor item context menus that buys any amount " +
-        "you enter, 99 at a time, since vendors cap a single transaction at 99.";
+        "you enter, repeating the purchase as many times as the vendor's per-transaction cap " +
+        "needs - 99 at a time for stackable items, one at a time for those that do not stack.";
 
     public override void Enable()
     {
@@ -180,7 +181,7 @@ public sealed class BulkPurchaseTweak : Tweak
 
         _lastOwned = owned;
 
-        var batch = BulkPurchasePlan.NextBatch(_remaining);
+        var batch = BulkPurchasePlan.NextBatch(_remaining, handler->Items[index].StackSize);
         if (Gil < (long)batch * handler->Items[index].PriceBuy)
         {
             Finish("you ran out of gil");

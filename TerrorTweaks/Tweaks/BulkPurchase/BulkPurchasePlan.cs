@@ -23,8 +23,12 @@ internal readonly record struct PurchasePlan(
 internal static class BulkPurchasePlan
 {
     // Gil vendors cap a single transaction at 99 no matter how large the item stacks -
-    // Grade 5 Dark Matter stacks to 999 but still only sells 99 at a time.
+    // Grade 5 Dark Matter stacks to 999 but still only sells 99 at a time. Items that do not
+    // stack at all are capped lower still, at one per transaction.
     public const int MaxPerPurchase = 99;
+
+    public static int BatchCap(int stackSize)
+        => stackSize <= 0 ? MaxPerPurchase : Math.Min(MaxPerPurchase, stackSize);
 
     // "Top up" reads the entered number as a target total owned; otherwise it is a flat
     // amount to buy on top of what the player already has.
@@ -40,15 +44,16 @@ internal static class BulkPurchasePlan
         // Counts every item as needing fresh slots, ignoring partial stacks already held,
         // so this only ever over-estimates - hence a warning rather than a hard block.
         var slots = stackSize <= 0 ? amount : (amount + stackSize - 1) / stackSize;
+        var cap = BatchCap(stackSize);
 
         return new PurchasePlan(
             amount,
-            (amount + MaxPerPurchase - 1) / MaxPerPurchase,
+            (amount + cap - 1) / cap,
             cost,
             slots,
             slots > freeSlots,
             cost > gil ? PurchaseBlock.NotEnoughGil : PurchaseBlock.None);
     }
 
-    public static int NextBatch(int remaining) => Math.Clamp(remaining, 0, MaxPerPurchase);
+    public static int NextBatch(int remaining, int stackSize) => Math.Clamp(remaining, 0, BatchCap(stackSize));
 }

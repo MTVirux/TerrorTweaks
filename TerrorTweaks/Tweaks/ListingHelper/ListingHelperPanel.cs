@@ -15,7 +15,7 @@ internal sealed class ListingHelperPanel
     private const float DefaultHeight = 380f;
     private const float DockOffsetY = 25f;
     private const float PriceColumnWidth = 80f;
-    private const float ActionColumnWidth = 110f;
+    private const float ActionColumnWidth = 120f;
     private const float SettingsButtonWidth = 90f;
 
     private static readonly Vector4 Muted   = new(0.65f, 0.65f, 0.65f, 1f);
@@ -193,19 +193,29 @@ internal sealed class ListingHelperPanel
             ImGui.TextUnformatted($"{row.CurrentPrice:N0}");
 
         ImGui.TableNextColumn();
-        var price = _inputs.TryGetValue(row.Target, out var stored) ? stored : row.CurrentPrice;
+        var price = Wanted(row);
         ImGui.SetNextItemWidth(-1);
         if (ImGui.InputInt($"##price{id}", ref price, 0))
             _inputs[row.Target] = Math.Clamp(price, UndercutCalculator.MinPrice, UndercutCalculator.MaxPrice);
 
         ImGui.TableNextColumn();
         ImGui.BeginDisabled(busy);
-        if (ImGui.Button($"Update##{id}"))
+        if (ImGuiComponents.IconButton($"##update{id}", FontAwesomeIcon.SyncAlt))
             _tweak.RequestPrices([row.Target]);
         ImGui.EndDisabled();
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Check the market board for this item and fill in an undercut price.");
+
+        ImGui.SameLine();
+
+        ImGui.BeginDisabled(busy);
+        if (ImGuiComponents.IconButton($"##apply{id}", FontAwesomeIcon.Check))
+            _tweak.Apply(row.Target, Wanted(row));
+        ImGui.EndDisabled();
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Reprice this item's listings to the value in its box.");
 
         ImGui.SameLine();
 
@@ -224,6 +234,9 @@ internal sealed class ListingHelperPanel
                 : "Hold CTRL to take this off the market.");
         }
     }
+
+    private int Wanted(PanelRow row) =>
+        _inputs.TryGetValue(row.Target, out var stored) ? stored : row.CurrentPrice;
 
     // Carried by the item's colour and its tooltip rather than a line of its own, so a verdict
     // never changes the height of a row.

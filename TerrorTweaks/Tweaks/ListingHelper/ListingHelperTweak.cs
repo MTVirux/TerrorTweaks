@@ -251,7 +251,12 @@ public sealed class ListingHelperTweak : Tweak
             $"{Listings(plan.Copies)} of {listing.Quantity}x {name} at {listing.Price:N0} gil");
     }
 
-    internal void ApplyAll(IReadOnlyDictionary<MarketTarget, int> prices)
+    internal void ApplyAll(IReadOnlyDictionary<MarketTarget, int> prices) => Apply(prices, null);
+
+    internal void Apply(MarketTarget target, int price) =>
+        Apply(new Dictionary<MarketTarget, int> { [target] = price }, target);
+
+    private void Apply(IReadOnlyDictionary<MarketTarget, int> prices, MarketTarget? only)
     {
         if (!CanStart())
             return;
@@ -262,6 +267,9 @@ public sealed class ListingHelperTweak : Tweak
 
         foreach (var row in Rows())
         {
+            if (only is { } wanted && row.Target != wanted)
+                continue;
+
             if (!prices.TryGetValue(row.Target, out var price) || price < UndercutCalculator.MinPrice)
                 continue;
 
@@ -281,7 +289,9 @@ public sealed class ListingHelperTweak : Tweak
 
         if (jobs.Count == 0)
         {
-            Services.Chat.Print("Listing Helper: nothing to apply - every listing is already at its price.");
+            Services.Chat.Print(only is null
+                ? "Listing Helper: nothing to apply - every listing is already at its price."
+                : "Listing Helper: nothing to apply - that listing is already at its price.");
             return;
         }
 

@@ -289,7 +289,7 @@ internal sealed class ListingHelperPanel
         var what = row.Listings == 1 ? "this listing" : $"all {row.Listings} listings";
         return toRetainer
             ? $"Take {what} off the market and into the retainer's inventory."
-            : $"Take {what} off the market and into your inventory.\nHold SHIFT as well for the retainer's.";
+            : $"Take {what} off the market and into your inventory.\nHold SHIFT as well to send to the retainer's inventory.";
     }
 
     private static string Ago(long ms)

@@ -451,6 +451,7 @@ public sealed class ListingHelperTweak : Tweak
 
         var ignoreQuality = Plugin.Config.ListingHelper.IgnoreQuality;
         var jobs = new List<Job>();
+        var names = new List<string>();
 
         RefreshOwnRetainers();
 
@@ -461,14 +462,17 @@ public sealed class ListingHelperTweak : Tweak
             _cache.Remove(target);
 
             var slots = FindSlots(target, ignoreQuality);
-            if (slots.Count > 0)
-                jobs.Add(new Job(target, slots[0], 0));
+            if (slots.Count == 0)
+                continue;
+
+            jobs.Add(new Job(target, slots[0], 0));
+            names.Add(ItemName(target.ItemId, target.HighQuality && !ignoreQuality));
         }
 
         if (jobs.Count == 0)
             return;
 
-        Begin(RunMode.Lookup, jobs, ignoreQuality, $"{jobs.Count} item(s)");
+        Begin(RunMode.Lookup, jobs, ignoreQuality, string.Join(", ", names));
     }
 
     private bool CanStart()

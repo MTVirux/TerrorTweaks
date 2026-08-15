@@ -331,13 +331,9 @@ public sealed class ListingHelperTweak : Tweak
 
         foreach (var target in targets)
         {
-            // Already looked up this session, so the price is recomputed from the stored
-            // listings instead of asking the server a second time.
-            if (Price(target) is { } cached)
-            {
-                _panel.SetPrice(target, cached);
-                continue;
-            }
+            // Update means ask the server again - the market moves under a stored answer, and a
+            // button that quietly reused one would look broken.
+            _cache.Remove(target);
 
             var slots = FindSlots(target, ignoreQuality);
             if (slots.Count > 0)
@@ -857,7 +853,7 @@ public sealed class ListingHelperTweak : Tweak
             _panel.SetPrice(target, result);
     }
 
-    internal UndercutResult? Price(MarketTarget target)
+    private UndercutResult? Price(MarketTarget target)
     {
         if (!_cache.TryGetValue(target, out var listings))
             return null;

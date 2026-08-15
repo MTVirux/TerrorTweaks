@@ -278,7 +278,7 @@ internal sealed class ListingHelperPanel
                 _tweak.RequestPrices([.. rows.Select(row => row.Target)]);
 
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Checks every item not looked up yet, about {Estimate(rows)} at the current delay.");
+                ImGui.SetTooltip($"Checks the market board for every item, about {Estimate(rows)} at the current delay.");
 
             ImGui.SameLine();
             if (ImGui.Button("Apply All##ListingHelperPanel", new Vector2(110, 0)))
@@ -305,14 +305,11 @@ internal sealed class ListingHelperPanel
             ImGui.SetTooltip("Open the TerrorTweaks settings window.");
     }
 
-    // Each lookup pays the configured delay plus the sell window and the server round trip.
-    private string Estimate(List<PanelRow> rows)
+    // Every row is checked again, so nothing is skipped for having been looked up before. Each
+    // one pays the configured delay plus the sell window and the server round trip.
+    private static string Estimate(List<PanelRow> rows)
     {
-        var pending = rows.Count(row => _tweak.Price(row.Target) is null);
-        if (pending == 0)
-            return "nothing left to check";
-
-        var seconds = (int)Math.Ceiling(pending * (Plugin.Config.ListingHelper.LookupDelayMs + 4000) / 1000.0);
+        var seconds = (int)Math.Ceiling(rows.Count * (Plugin.Config.ListingHelper.LookupDelayMs + 4000) / 1000.0);
         return seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
     }
 }

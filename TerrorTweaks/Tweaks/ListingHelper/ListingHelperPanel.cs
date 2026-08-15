@@ -262,18 +262,28 @@ internal sealed class ListingHelperPanel
 
         // Held rather than clicked outright - this pulls real listings off the market, and the
         // button sits one row away from the one you press repeatedly.
-        var armed = ImGui.GetIO().KeyCtrl;
+        var io = ImGui.GetIO();
+        var armed = io.KeyCtrl;
+        var toRetainer = armed && io.KeyShift;
+
         ImGui.BeginDisabled(busy || !armed);
         if (ImGuiComponents.IconButton($"##remove{id}", FontAwesomeIcon.Trash))
-            _tweak.RemoveListings(row.Target);
+            _tweak.RemoveListings(row.Target, toRetainer ? BagSide.Retainer : BagSide.Player);
         ImGui.EndDisabled();
 
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-        {
-            ImGui.SetTooltip(armed
-                ? $"Take {(row.Listings == 1 ? "this listing" : $"all {row.Listings} listings")} off the market."
-                : "Hold CTRL to take this off the market.");
-        }
+            ImGui.SetTooltip(RemoveTooltip(row, armed, toRetainer));
+    }
+
+    private static string RemoveTooltip(PanelRow row, bool armed, bool toRetainer)
+    {
+        if (!armed)
+            return "Hold CTRL to take this off the market, or CTRL+SHIFT to send it to the retainer.";
+
+        var what = row.Listings == 1 ? "this listing" : $"all {row.Listings} listings";
+        return toRetainer
+            ? $"Take {what} off the market and into the retainer's inventory."
+            : $"Take {what} off the market and into your inventory. Hold SHIFT as well for the retainer's.";
     }
 
     private int Wanted(PanelRow row) =>

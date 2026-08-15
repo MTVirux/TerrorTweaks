@@ -140,6 +140,7 @@ public sealed class ListingHelperTweak : Tweak
     private CancellationTokenSource _web = new();
 
     private RunMode _mode;
+    private BagSide _returnTo;
     private string _runLabel = string.Empty;
     private int _jobIndex;
     private int _updated;
@@ -409,7 +410,7 @@ public sealed class ListingHelperTweak : Tweak
         Begin(RunMode.Reprice, jobs, ignoreQuality, $"{Listings(jobs.Count)} across {items} item(s)");
     }
 
-    internal void RemoveListings(MarketTarget target)
+    internal void RemoveListings(MarketTarget target, BagSide destination)
     {
         if (!CanStart())
             return;
@@ -425,6 +426,8 @@ public sealed class ListingHelperTweak : Tweak
         var jobs = new List<Job>();
         foreach (var slot in slots)
             jobs.Add(new Job(target, slot, 0));
+
+        _returnTo = destination;
 
         var name = ItemName(target.ItemId, target.HighQuality && !ignoreQuality);
         Begin(RunMode.Remove, jobs, ignoreQuality, $"{Listings(jobs.Count)} of {name}");
@@ -485,7 +488,8 @@ public sealed class ListingHelperTweak : Tweak
         Services.Chat.Print(mode switch
         {
             RunMode.Reprice => $"Listing Helper: setting {label}.",
-            RunMode.Remove => $"Listing Helper: taking {label} off the market.",
+            RunMode.Remove =>
+                $"Listing Helper: taking {label} off the market and into {DuplicateSource.Describe(_returnTo)}.",
             RunMode.Duplicate => $"Listing Helper: putting up {label}.",
             RunMode.ListUndercut => $"Listing Helper: checking the market before listing {label}.",
             _ => $"Listing Helper: checking market prices for {label}.",
@@ -666,10 +670,11 @@ public sealed class ListingHelperTweak : Tweak
         var entries = MenuEntries(menu);
         Services.Log.Debug($"Listing Helper: context menu held [{string.Join(" | ", entries)}]");
 
-        var entry = entries.FindIndex(IsReturnEntry);
+        var entry = entries.FindIndex(text => IsReturnEntry(text, _returnTo));
         if (entry < 0)
         {
-            Finish($"nothing on the menu looked like a return entry - it held [{string.Join(" | ", entries)}]");
+            Finish($"nothing on the menu offered to return it to {DuplicateSource.Describe(_returnTo)}"
+                   + $" - it held [{string.Join(" | ", entries)}]");
             return;
         }
 
@@ -819,9 +824,20 @@ public sealed class ListingHelperTweak : Tweak
     private static bool IsSellEntry(string entry) =>
         entry.Contains("Put Up for Sale", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsReturnEntry(string entry) =>
-        entry.Contains("Return", StringComparison.OrdinalIgnoreCase)
-        || entry.Contains("Retrieve", StringComparison.OrdinalIgnoreCase);
+    // The menu carries a return entry per destination, and they read the same but for the word
+    // "Retainer" - one drops the stack in the player's bags, the other hands it back to the
+    // retainer. Taking whichever comes first would send half of them to the wrong place.
+    private static bool IsReturnEntry(string entry, BagSide destination)
+    {
+        if (!entry.Contains("Return", StringComparison.OrdinalIgnoreCase)
+            && !entry.Contains("Retrieve", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var retainer = entry.Contains("Retainer", StringComparison.OrdinalIgnoreCase);
+        return destination == BagSide.Retainer ? retainer : !retainer;
+    }
 
     private static unsafe void FireMenuEntry(AtkUnitBase* menu, int entry)
     {
@@ -1139,7 +1155,7 @@ public sealed class ListingHelperTweak : Tweak
         if (_mode == RunMode.Remove)
         {
             Services.Chat.Print(reason is null
-                ? $"Listing Helper: took {_runLabel} off the market."
+                ? $"Listing Helper: took {_runLabel} off the market and into {DuplicateSource.Describe(_returnTo)}."
                 : $"Listing Helper: stopped after removing {Listings(_updated)} - {reason}.");
             return;
         }

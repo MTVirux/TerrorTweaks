@@ -1,30 +1,30 @@
 [
-{
-  "Author": "MTVirux",
-  "Name": "TerrorTweaks",
-  "Punchline": "A collection of small quality-of-life tweaks for FFXIV.",
-  "Description": "A collection of small quality-of-life tweaks for FFXIV.\n\nDM @mtvirux on discord for assistance or bug reports.",
-  "Tags": [
-    "Tweaks",
-    "QoL",
-    "ContextMenu",
-    "Clipboard",
-    "Terror"
-  ],
-  "InternalName": "TerrorTweaks",
-  "AssemblyVersion": "1.0.0.4",
-  "TestingAssemblyVersion": "1.0.0.5",
-  "RepoUrl": "https://github.com/MTVirux/TerrorTweaks",
-  "ApplicableVersion": "any",
-  "DalamudApiLevel": 15,
-  "TestingDalamudApiLevel": 15,
-  "IsHide": "False",
-  "IsTestingExclusive": "False",
-  "DownloadCount": 0,
-  "LastUpdate": 1786836486,
-  "DownloadLinkInstall": "https://github.com/MTVirux/TerrorTweaks/releases/download/1.0.0.4/TerrorTweaks.zip",
-  "DownloadLinkUpdate": "https://github.com/MTVirux/TerrorTweaks/releases/download/1.0.0.4/TerrorTweaks.zip",
-  "DownloadLinkTesting": "https://github.com/MTVirux/TerrorTweaks/releases/download/1.0.0.4/TerrorTweaks.zip",
-  "IconUrl": "https://raw.githubusercontent.com/MTVirux/TerrorTweaks/main/images/icon.png"
-}
+  {
+    "Author": "MTVirux",
+    "Name": "TerrorTweaks",
+    "Punchline": "A collection of small quality-of-life tweaks for FFXIV.",
+    "Description": "A collection of small quality-of-life tweaks for FFXIV.\n\nDM @mtvirux on discord for assistance or bug reports.",
+    "Tags": [
+      "Tweaks",
+      "QoL",
+      "ContextMenu",
+      "Clipboard",
+      "Terror"
+    ],
+    "InternalName": "TerrorTweaks",
+    "AssemblyVersion": "1.0.0.4",
+    "TestingAssemblyVersion": "1.0.0.5",
+    "RepoUrl": "https://github.com/MTVirux/TerrorTweaks",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "TestingDalamudApiLevel": 15,
+    "IsHide": "False",
+    "IsTestingExclusive": "False",
+    "DownloadCount": 0,
+    "LastUpdate": 1786836578,
+    "DownloadLinkInstall": "https://github.com/MTVirux/TerrorTweaks/releases/download/1.0.0.4/TerrorTweaks.zip",
+    "DownloadLinkUpdate": "https://github.com/MTVirux/TerrorTweaks/releases/download/1.0.0.4/TerrorTweaks.zip",
+    "DownloadLinkTesting": "https://github.com/MTVirux/TerrorTweaks/releases/download/testing_1.0.0.5/TerrorTweaks.zip",
+    "IconUrl": "https://raw.githubusercontent.com/MTVirux/TerrorTweaks/main/images/icon.png"
+  }
 ]

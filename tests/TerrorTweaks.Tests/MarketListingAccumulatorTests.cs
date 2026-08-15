@@ -85,7 +85,11 @@ public class MarketListingAccumulatorTests
 
         Assert.False(accumulator.Complete);
         Assert.Equal(MarketListingAccumulator.ListingsPerPage, accumulator.Listings.Count);
-        Assert.True(accumulator.HasRequest(3));
+
+        accumulator.AddPage(3, [new(600, true, 12)]);
+
+        Assert.True(accumulator.Complete);
+        Assert.Equal(600u, accumulator.Listings[^1].PricePerUnit);
     }
 
     [Fact]
@@ -112,7 +116,6 @@ public class MarketListingAccumulatorTests
 
         Assert.False(accumulator.Complete);
         Assert.Empty(accumulator.Listings);
-        Assert.False(accumulator.HasRequest(3));
 
         accumulator.AddPage(4, [new(500, true, 11)]);
 
@@ -134,21 +137,6 @@ public class MarketListingAccumulatorTests
 
         Assert.False(accumulator.Complete);
         Assert.Empty(accumulator.Listings);
-        Assert.False(accumulator.HasRequest(3));
-    }
-
-    [Fact]
-    public void HasRequest_OnlyMatchesTheAdoptedId()
-    {
-        var accumulator = new MarketListingAccumulator();
-
-        Assert.False(accumulator.HasRequest(0));
-        Assert.False(accumulator.HasRequest(3));
-
-        accumulator.AddPage(3, FullPage(100));
-
-        Assert.True(accumulator.HasRequest(3));
-        Assert.False(accumulator.HasRequest(4));
     }
 
     [Fact]
@@ -160,6 +148,47 @@ public class MarketListingAccumulatorTests
 
         Assert.True(accumulator.Complete);
         Assert.Empty(accumulator.Listings);
-        Assert.True(accumulator.HasRequest(3));
+    }
+
+    [Fact]
+    public void AddPage_EmptyPageAfterOwnPages_Completes()
+    {
+        var accumulator = new MarketListingAccumulator();
+
+        accumulator.AddPage(3, FullPage(100));
+        accumulator.AddPage(3, []);
+
+        Assert.True(accumulator.Complete);
+        Assert.Equal(MarketListingAccumulator.ListingsPerPage, accumulator.Listings.Count);
+    }
+
+    [Fact]
+    public void AddPage_EmptyPageWithDiscardedId_IsIgnored()
+    {
+        var accumulator = new MarketListingAccumulator();
+
+        accumulator.Discard(3);
+        accumulator.AddPage(3, []);
+
+        Assert.False(accumulator.Complete);
+
+        accumulator.AddPage(4, []);
+
+        Assert.True(accumulator.Complete);
+        Assert.Empty(accumulator.Listings);
+    }
+
+    [Fact]
+    public void AddPage_EmptyPageReplayingAnAbandonedLookupsId_IsIgnored()
+    {
+        var accumulator = new MarketListingAccumulator();
+
+        // A lookup that only ever saw full pages and was given up on mid-flight.
+        accumulator.AddPage(3, FullPage(100));
+        accumulator.Begin();
+        accumulator.AddPage(3, []);
+
+        Assert.False(accumulator.Complete);
+        Assert.Empty(accumulator.Listings);
     }
 }

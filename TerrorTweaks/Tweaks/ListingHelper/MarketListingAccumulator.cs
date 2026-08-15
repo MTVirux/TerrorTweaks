@@ -9,42 +9,44 @@ internal sealed class MarketListingAccumulator
     public const int ListingsPerPage = 10;
 
     private readonly List<MarketListing> _listings = [];
+    private readonly HashSet<int> _seenRequestIds = [];
 
     private int? _requestId;
-    private int? _lastCompletedRequestId;
 
     public bool Complete { get; private set; }
 
     public IReadOnlyList<MarketListing> Listings => _listings;
 
-    public bool HasRequest(int requestId) => _requestId == requestId;
-
     public void Begin()
     {
-        // A lookup given up on mid-flight - one that only ever saw full pages - still has to
-        // stay recognised, or a straggler from it is adopted as the next lookup's first page.
-        if (_requestId is not null)
-            _lastCompletedRequestId = _requestId;
-
         _listings.Clear();
         _requestId = null;
         Complete = false;
     }
+
+    // A page answering some other lookup still burns its request id, so an empty page following
+    // it cannot be taken for this lookup's answer.
+    public void Discard(int requestId) => _seenRequestIds.Add(requestId);
 
     public void AddPage(int requestId, IReadOnlyList<MarketListing> page)
     {
         if (Complete)
             return;
 
-        // The server replays the id of the last answered request when it responds "please wait
-        // and try your search again", which would otherwise read as a genuine empty result.
-        if (requestId == _lastCompletedRequestId)
-            return;
-
         if (_requestId is null)
+        {
+            // The server replays the id of the last answered request when it responds "please
+            // wait and try your search again", and a straggler from a lookup that was given up
+            // on carries its own old id, so only an unseen id can claim this lookup.
+            if (!_seenRequestIds.Add(requestId))
+                return;
+
             _requestId = requestId;
+        }
         else if (requestId != _requestId)
+        {
             return;
+        }
 
         foreach (var listing in page)
             _listings.Add(listing);
@@ -52,12 +54,6 @@ internal sealed class MarketListingAccumulator
         // A full page means more may still follow, even when every entry on it gets filtered
         // out later - giving up here is what makes an item's first HQ offer go missing.
         if (page.Count < ListingsPerPage)
-            Finish();
-    }
-
-    private void Finish()
-    {
-        Complete = true;
-        _lastCompletedRequestId = _requestId;
+            Complete = true;
     }
 }

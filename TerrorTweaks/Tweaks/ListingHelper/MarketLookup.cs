@@ -48,19 +48,20 @@ internal sealed class MarketLookup
     {
         var page = offerings.ItemListings;
 
-        // An empty page carries no item id to check it against, so it is only believed once a
-        // page that did match has claimed the request - otherwise a late answer meant for the
-        // previous item reads as this one having nothing listed.
+        // An empty page carries no item id to check it against, so the request id is all there
+        // is to go on: an unseen one is this lookup answering "nobody is selling it", while a
+        // replayed one is a throttle notice or a straggler meant for an earlier item.
         if (page.Count == 0)
         {
-            if (_accumulator.HasRequest(offerings.RequestId))
-                _accumulator.AddPage(offerings.RequestId, []);
-
+            _accumulator.AddPage(offerings.RequestId, []);
             return;
         }
 
         if (ItemIdNormalizer.ToBaseItemId(page[0].ItemId) != _itemId)
+        {
+            _accumulator.Discard(offerings.RequestId);
             return;
+        }
 
         var listings = new List<MarketListing>(page.Count);
         foreach (var listing in page)

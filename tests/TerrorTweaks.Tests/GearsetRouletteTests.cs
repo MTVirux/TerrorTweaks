@@ -70,6 +70,11 @@ public class GearsetRouletteTests
         Assert.True(GearsetRoulette.IsEligible(JobCategory.Caster, true, None with { IncludeLimited = true }));
         // The Casters toggle alone must not surface a limited job.
         Assert.False(GearsetRoulette.IsEligible(JobCategory.Caster, true, None with { IncludeCasters = true }));
+
+        // Beastmaster is a limited Melee.
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Melee, true, None));
+        Assert.True(GearsetRoulette.IsEligible(JobCategory.Melee, true, None with { IncludeLimited = true }));
+        Assert.False(GearsetRoulette.IsEligible(JobCategory.Melee, true, None with { IncludeMelee = true }));
     }
 
     [Fact]

@@ -33,6 +33,7 @@ public class JobClassifierTests
     [InlineData(34u)]  // SAM
     [InlineData(39u)]  // RPR
     [InlineData(41u)]  // VPR
+    [InlineData(43u)]  // BST
     public void MeleeIds_AreMelee(uint id)
         => Assert.Equal(JobCategory.Melee, JobClassifier.Classify(id));
 
